@@ -15,7 +15,7 @@ const os = require("os");
 /* ---------------------------------------------------------- */
 const STORE_PATH = () => path.join(app.getPath("userData"), "store.json");
 const DEFAULT_STORE = {
-  settings: { reporteiToken: "", trelloKey: "", trelloToken: "", geminiKey: "", geminiModel: "gemini-2.5-flash", aiEngine: "gemini", reportTemplate: "", googleSheetsKey: "", metaToken: "", googleAdsDevToken: "", googleAdsClientId: "", googleAdsClientSecret: "", googleAdsRefreshToken: "", googleAdsLoginCustomerId: "", googleAdsApiVersion: "", pageSpeedKey: "", updateBaseUrl: "" },
+  settings: { reporteiToken: "", trelloKey: "", trelloToken: "", geminiKey: "", geminiModel: "gemini-2.5-flash", aiEngine: "gemini", reportTemplate: "", googleSheetsKey: "", metaToken: "", googleAdsDevToken: "", googleAdsClientId: "", googleAdsClientSecret: "", googleAdsRefreshToken: "", googleAdsLoginCustomerId: "", googleAdsApiVersion: "", pageSpeedKey: "", updateBaseUrl: "https://raw.githubusercontent.com/erikedias/pmp-update-bfypgb/main" },
   clients: [], // [{projectId, name, trelloBoardId, trelloBoardName}]
   history: [], // [{id, projectId, clientName, weekLabel, start, end, savedAt, platformResults, items, analysisText, trello}]
   actions: [], // [{id, at, projectId, clientName, type, summary, detail}]

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "notes": "Versão inicial — rotina Minha Semana (PRÉ/CALL/PÓS, pacing, feito/pendências), análise por plataforma, criativos e orçamento via Trello, kickoff→persona, salvar no Obsidian",
+  "notes": "Versão inicial",
   "files": [
     "src/app.js",
     "src/engine.js",
