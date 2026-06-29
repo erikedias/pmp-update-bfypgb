@@ -1,0 +1,20 @@
+{
+  "version": "1.0.0",
+  "notes": "Versão inicial — rotina Minha Semana (PRÉ/CALL/PÓS, pacing, feito/pendências), análise por plataforma, criativos e orçamento via Trello, kickoff→persona, salvar no Obsidian",
+  "files": [
+    "src/app.js",
+    "src/engine.js",
+    "src/funil-studio/assets/atom-CD44gDqs.png",
+    "src/funil-studio/assets/html2canvas.esm-CBrSDip1.js",
+    "src/funil-studio/assets/index-BXvdcgbi.css",
+    "src/funil-studio/assets/index-g4FjeOx8.js",
+    "src/funil-studio/assets/index.es-BeXkcQnq.js",
+    "src/funil-studio/assets/purify.es-V6uLfjnH.js",
+    "src/funil-studio/index.html",
+    "src/index.html",
+    "src/styles.css",
+    "electron/main.cjs",
+    "electron/preload.cjs",
+    "package.json"
+  ]
+}

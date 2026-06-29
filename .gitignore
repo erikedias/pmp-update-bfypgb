@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/node_modules/
+*.zip
+*.dmg
+*.log
+.DS_Store
+store.json
+patch-version.txt

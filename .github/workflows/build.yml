@@ -1,0 +1,41 @@
+# Gera os instaláveis do Painel de Mídia Paga pra Mac (.dmg) e Windows (.exe)
+# Como usar: suba o projeto pro GitHub. A cada push (ou pelo botão "Run workflow"),
+# o GitHub compila nos dois sistemas e deixa os instaladores em "Artifacts" pra baixar.
+name: Build instaláveis (Mac + Windows)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependências
+        run: npm install
+
+      - name: Build Mac (.dmg)
+        if: matrix.os == 'macos-latest'
+        run: npm run build:mac
+
+      - name: Build Windows (.exe)
+        if: matrix.os == 'windows-latest'
+        run: npm run build:win
+
+      - name: Subir instaladores
+        uses: actions/upload-artifact@v4
+        with:
+          name: instalavel-${{ matrix.os }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
+          if-no-files-found: ignore

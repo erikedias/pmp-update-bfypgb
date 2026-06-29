@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: https:;">
+<title>Painel de Mídia Paga</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <aside class="nav">
+    <div class="brand">
+      <div class="logo">d</div>
+      <div>Mídia Paga<small>@diasesteci</small></div>
+    </div>
+    <button class="tab active" data-view="semana">🗓️ Minha semana</button>
+    <button class="tab" data-view="painel">📊 Painel da semana</button>
+    <button class="tab" data-view="urgencia">🚨 Urgência</button>
+    <button class="tab" data-view="funil">🧠 Funil Studio</button>
+    <button class="tab" data-view="subida">🚀 Subida</button>
+    <button class="tab" data-view="termos">🔎 Termos de busca</button>
+    <button class="tab" data-view="kw">📣 Google Ads</button>
+    <div class="nav-sep">Sessões</div>
+    <button class="tab" data-view="meta">📘 Meta Ads</button>
+    <button class="tab" data-view="gads">🟢 Google Ads</button>
+    <button class="tab" data-view="gtm">🏷️ Tag Manager</button>
+    <div class="nav-sep">Relatórios</div>
+    <button class="tab" data-view="perfil">👤 Perfil do cliente</button>
+    <button class="tab" data-view="relatorios">📄 Relatórios</button>
+    <button class="tab" data-view="historico">🗂️ Histórico</button>
+    <button class="tab" data-view="config">⚙️ Configurações</button>
+    <div class="spacer"></div>
+    <div class="hint" id="navHint">Conecte suas chaves em Configurações para começar.</div>
+  </aside>
+
+  <main>
+    <!-- ============ MINHA SEMANA ============ -->
+    <section id="view-semana" class="wrap">
+      <div class="topbar" style="justify-content:space-between">
+        <div class="field">
+          <label>Hoje</label>
+          <div id="semHojeLabel" style="font-size:16px;font-weight:700;color:var(--txt);padding:6px 0">—</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="chip-btn" id="semConfigBtn">⚙️ Configurar dias das calls</button>
+        </div>
+      </div>
+      <div id="semConfigBox" class="hidden"></div>
+      <div id="semBody"></div>
+    </section>
+
+    <!-- ============ PAINEL ============ -->
+    <section id="view-painel" class="wrap hidden">
+      <div class="topbar">
+        <div class="field">
+          <label>Cliente</label>
+          <select id="clientSel"></select>
+        </div>
+        <div class="field">
+          <label>Semana</label>
+          <div class="weeknav">
+            <button id="weekPrev" title="Semana anterior">‹</button>
+            <input type="text" id="weekLabel" readonly style="min-width:170px;text-align:center;cursor:default">
+            <button id="weekNext" title="Próxima semana">›</button>
+            <button id="customToggle" title="Escolher dias específicos">📅</button>
+          </div>
+        </div>
+        <div class="field hidden" id="customRange">
+          <label>Dias específicos</label>
+          <div class="weeknav">
+            <input type="date" id="perStart" style="min-width:140px">
+            <span style="color:var(--muted)">→</span>
+            <input type="date" id="perEnd" style="min-width:140px">
+            <button id="perApply" title="Aplicar período">✓</button>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="analisarBtn">Analisar semana</button>
+        <div class="spacer"></div>
+        <button class="btn btn-purple hidden" id="enviarBtn">📤 Enviar pro Trello</button>
+      </div>
+
+      <div id="painelBody">
+        <div class="state"><div class="big">📊</div>Selecione um cliente e a semana e clique em <b>Analisar semana</b>.</div>
+      </div>
+    </section>
+
+    <!-- ============ URGÊNCIA ============ -->
+    <section id="view-urgencia" class="wrap hidden">
+      <div class="topbar">
+        <div class="field"><label>Monitoramento</label><div style="font-size:18px;font-weight:700;padding:6px 0">🚨 Clientes em atenção</div></div>
+        <button class="btn btn-primary" id="urgenciaBtn">Analisar urgências (últimos 2 dias)</button>
+      </div>
+      <div id="urgenciaBody">
+        <div class="state"><div class="big">🚨</div>Clica em <b>Analisar urgências</b> — o app varre todos os clientes e compara os últimos 2 dias com o padrão (14 dias anteriores), destacando o que está fora do comum (investimento, leads, CPL).</div>
+      </div>
+    </section>
+
+    <!-- ============ FUNIL STUDIO ============ -->
+    <section id="view-funil" class="funil-wrap hidden">
+      <iframe id="funilFrame" src="funil-studio/index.html" title="Funil Studio"></iframe>
+    </section>
+
+    <!-- ============ SUBIDA ============ -->
+    <section id="view-subida" class="wrap hidden">
+      <div class="topbar">
+        <div class="field">
+          <label>Cliente (conta de anúncio)</label>
+          <select id="subClientSel"></select>
+        </div>
+        <div class="spacer"></div>
+      </div>
+      <div id="subBody">
+        <div class="state"><div class="big">🚀</div>Monte a estratégia no <b>Funil Studio</b> e use <b>Exportar → Enviar pro Painel (subida)</b>,<br>ou cole abaixo o JSON da pré-estrutura.
+          <div style="max-width:680px;margin:18px auto 0">
+            <textarea id="subPaste" class="analysis-box" style="width:100%;min-height:120px;background:var(--panel-2);color:#cdd6e3;border:1px solid var(--line);border-radius:12px;padding:12px;outline:none" placeholder='{"versao":1,"plataformas":[...]}'></textarea>
+            <button class="btn btn-ghost" id="subLoadBtn" style="margin-top:10px">Carregar JSON</button>
+            <button class="btn btn-ghost" id="subOpenBtn" style="margin-top:10px">📁 Abrir arquivo de estratégia</button>
+            <button class="btn btn-ghost" id="subToFunilBtn" style="margin-top:10px">🧠 Abrir no Funil Studio (revisar)</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ GOOGLE ADS (central) ============ -->
+    <section id="view-kw" class="wrap hidden">
+      <div class="topbar">
+        <div class="field"><label>Cliente (Google Ads)</label><select id="kwClientSel"></select></div>
+        <div class="field" style="flex:1;min-width:240px"><label>Site do cliente (a IA lê pra fazer tudo)</label><input type="text" id="kwUrl" placeholder="https://site-do-cliente.com"></div>
+      </div>
+      <div class="formrow" style="max-width:900px">
+        <label>Serviço foco / o que o cliente vende (puxa do perfil; complementa o site) <span id="kwPersonaTag" style="font-size:12px;color:var(--muted);font-weight:400"></span></label>
+        <textarea id="kwService" style="width:100%;min-height:60px;background:var(--panel-2);color:#cdd6e3;border:1px solid var(--line);border-radius:12px;padding:12px;outline:none;resize:vertical" placeholder="Ex.: contabilidade para clínicas médicas em São Paulo"></textarea>
+      </div>
+
+      <div class="gads-modules">
+        <!-- 1. Persona -->
+        <div class="gads-mod" id="mod-persona">
+          <div class="gads-mod__head"><span class="gads-mod__n">1</span>
+            <div><div class="gads-mod__t">Persona</div><div class="gads-mod__s">Problemas, concorrência, objeções, desejos</div></div>
+            <span class="gads-mod__badge" id="badge-persona"></span></div>
+          <button class="btn btn-ghost gads-run" data-mod="persona">Gerar persona</button>
+          <div class="gads-out md hidden" id="out-persona"></div>
+        </div>
+        <!-- 2. Risco de Mercado -->
+        <div class="gads-mod" id="mod-risco">
+          <div class="gads-mod__head"><span class="gads-mod__n">2</span>
+            <div><div class="gads-mod__t">Risco de Mercado</div><div class="gads-mod__s">Análise de viabilidade pra anunciar</div></div>
+            <span class="gads-mod__badge" id="badge-risco"></span></div>
+          <button class="btn btn-ghost gads-run" data-mod="risco">Analisar viabilidade</button>
+          <div class="gads-out md hidden" id="out-risco"></div>
+        </div>
+        <!-- 3. Planejamento (palavras-chave com volume real) -->
+        <div class="gads-mod" id="mod-kw">
+          <div class="gads-mod__head"><span class="gads-mod__n">3</span>
+            <div><div class="gads-mod__t">Planejamento de palavras-chave</div><div class="gads-mod__s">Volume real do Google · concorrência · lance</div></div>
+            <span class="gads-mod__badge" id="badge-kw"></span></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px">
+            <div class="formrow" style="flex:1;min-width:200px;margin:0"><label>Sementes (opcional)</label><input type="text" id="kwSeeds" placeholder="contador clínica, contabilidade médica"></div>
+            <button class="btn btn-primary" id="kwBtn">Gerar palavras-chave</button>
+            <button class="btn btn-ghost hidden" id="kwCopyBtn">📋 Copiar</button>
+          </div>
+          <div id="kwBody"></div>
+        </div>
+        <!-- 4. Ideias de Anúncios -->
+        <div class="gads-mod" id="mod-anuncios">
+          <div class="gads-mod__head"><span class="gads-mod__n">4</span>
+            <div><div class="gads-mod__t">Ideias de Anúncios</div><div class="gads-mod__s">Títulos & descrições (RSA) — dentro das políticas</div></div>
+            <span class="gads-mod__badge" id="badge-anuncios"></span></div>
+          <button class="btn btn-ghost gads-run" data-mod="anuncios">Gerar anúncios</button>
+          <div class="gads-out md hidden" id="out-anuncios"></div>
+        </div>
+      </div>
+      <p class="sub" style="max-width:900px;margin-top:14px">🛡️ Tudo é gerado respeitando as <b>políticas do Google Ads</b> (sem caps lock, sem promessas enganosas, limites de caractere do RSA, conteúdo restrito sinalizado no Risco de Mercado).</p>
+    </section>
+
+    <!-- ============ TERMOS DE BUSCA (negativação) ============ -->
+    <section id="view-termos" class="wrap hidden">
+      <div class="topbar">
+        <div class="field"><label>Cliente (Google Ads)</label><select id="termClientSel"></select></div>
+        <div class="field"><label>Período</label>
+          <select id="termPeriod" style="min-width:150px">
+            <option value="7">Últimos 7 dias</option>
+            <option value="14">Últimos 14 dias</option>
+            <option value="30" selected>Últimos 30 dias</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="termBtn">Analisar termos</button>
+        <div class="spacer"></div>
+        <button class="btn btn-purple hidden" id="termNegBtn">🚫 Negativar selecionados</button>
+      </div>
+      <div class="formrow" style="max-width:760px">
+        <label>O que esse cliente faz / vende (pra IA entender o que é irrelevante)</label>
+        <input type="text" id="termService" placeholder="Ex.: contabilidade para médicos · NÃO faz: vagas de emprego, cursos">
+      </div>
+      <div id="termBody">
+        <div class="state"><div class="big">🔎</div>Escreva o que o cliente faz, escolha o período e clique em <b>Analisar termos</b>.<br>
+          <span style="font-size:12px">O app puxa os termos reais que dispararam os anúncios e a IA marca os que não fazem sentido pra negativar.</span></div>
+      </div>
+    </section>
+
+    <!-- ============ PERFIL DO CLIENTE ============ -->
+    <section id="view-perfil" class="wrap hidden">
+      <div class="topbar">
+        <div class="field"><label>Cliente</label><select id="perfClientSel"></select></div>
+        <button class="btn btn-ghost" id="perfFillBtn">📥 Preencher do Obsidian</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="perfSaveBtn">Salvar perfil</button>
+      </div>
+      <div class="card">
+        <p class="sub">O que esse cliente faz. Usado pela IA (negativação de termos, análises) pra entender o negócio. Dá pra preencher do seu Obsidian (~/Claude/Clientes) automaticamente. <span id="perfMsg" style="color:var(--accent)"></span></p>
+        <div class="formrow"><label>Serviço (1 frase)</label><input type="text" id="perfServico" placeholder="Ex.: contabilidade para clínicas médicas"></div>
+        <div class="formrow"><label>O que faz / oferece</label><textarea id="perfFaz" style="width:100%;min-height:90px;background:var(--panel-2);color:#cdd6e3;border:1px solid var(--line);border-radius:12px;padding:12px;outline:none;resize:vertical"></textarea></div>
+        <div class="formrow"><label>O que NÃO faz (pra negativar buscas irrelevantes)</label><textarea id="perfNaoFaz" style="width:100%;min-height:70px;background:var(--panel-2);color:#cdd6e3;border:1px solid var(--line);border-radius:12px;padding:12px;outline:none;resize:vertical" placeholder="Ex.: não oferece vagas de emprego, não vende cursos..."></textarea></div>
+        <div class="formrow"><label>Persona / cliente ideal</label><textarea id="perfPersona" style="width:100%;min-height:80px;background:var(--panel-2);color:#cdd6e3;border:1px solid var(--line);border-radius:12px;padding:12px;outline:none;resize:vertical"></textarea></div>
+        <div class="formrow"><label>Observações</label><textarea id="perfObs" style="width:100%;min-height:60px;background:var(--panel-2);color:#cdd6e3;border:1px solid var(--line);border-radius:12px;padding:12px;outline:none;resize:vertical"></textarea></div>
+      </div>
+
+      <div class="card">
+        <h2>📄 Kickoff → Persona (9 pilares)</h2>
+        <p class="sub">Cole o documento de kickoff e gere a persona completa no estilo da sua skill (problemas, concorrentes, confiança, dúvidas, desejos, objeções). Depois salve — as ferramentas (Google Ads, copy, análise) passam a usar essa persona. <span id="perfPersonaMsg" style="color:var(--accent)"></span></p>
+        <div class="formrow">
+          <label>🎯 Serviço a focar (se a empresa tem vários — opcional)</label>
+          <input type="text" id="perfServicoFoco" placeholder="Ex.: focar só em Lentes de Contato Dental (ignorar ortodontia e clareamento)">
+        </div>
+        <div class="formrow">
+          <label>Documento de kickoff</label>
+          <textarea id="perfKickoff" style="width:100%;min-height:120px;background:var(--panel-2);color:#cdd6e3;border:1px solid var(--line);border-radius:12px;padding:12px;outline:none;resize:vertical" placeholder="Cole o que foi levantado no kickoff: o que o cliente vende, o que NÃO vende, público, diferenciais, concorrentes, objeções, ticket, região..."></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <button class="chip-btn" id="perfKickoffFile">📂 Abrir arquivo (.txt/.md)</button>
+            <button class="btn btn-primary" id="perfPersonaGen" style="padding:8px 14px">🤖 Gerar persona</button>
+          </div>
+        </div>
+        <div class="formrow">
+          <label>Persona gerada (editável antes de salvar)</label>
+          <textarea id="perfPersonaDoc" style="width:100%;min-height:260px;background:var(--panel-2);color:#cdd6e3;border:1px solid var(--line);border-radius:12px;padding:12px;outline:none;resize:vertical" placeholder="A persona aparece aqui depois de gerar."></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <button class="btn btn-primary" id="perfPersonaSave" style="padding:8px 14px">Salvar persona no perfil</button>
+            <button class="btn btn-ghost" id="perfPersonaObs" style="padding:8px 14px">💾 Salvar no Obsidian</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>💬 Conversar sobre o cliente (lê o Obsidian)</h2>
+        <p class="sub">Pergunte qualquer coisa sobre esse cliente — a IA lê <b>todas as notas do cofre</b> dele (~/Claude/Clientes) e responde. Ex.: "qual o modelo de relatório dele?", "quais os ângulos de copy que funcionam?", "resume a concorrência". <span id="askVaultInfo" class="sub"></span></p>
+        <div id="askChat" class="ask-chat"></div>
+        <div class="ask-bar">
+          <input type="text" id="askInput" placeholder="Pergunte sobre o cliente e tecle Enter…">
+          <button class="btn btn-primary" id="askSend">Perguntar</button>
+        </div>
+        <div class="ask-suggest" id="askSuggest">
+          <button class="chip-btn ask-q">Resume tudo que você sabe desse cliente</button>
+          <button class="chip-btn ask-q">Qual o modelo/estrutura de relatório dele?</button>
+          <button class="chip-btn ask-q">Quais ângulos de copy e mensagens funcionam?</button>
+          <button class="chip-btn ask-q">Como está a concorrência dele?</button>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============ RELATÓRIOS ============ -->
+    <section id="view-relatorios" class="wrap hidden">
+      <div class="topbar">
+        <div class="field">
+          <label>Cliente</label>
+          <select id="repClientSel"></select>
+        </div>
+        <div class="field">
+          <label>Mês</label>
+          <div class="weeknav">
+            <button id="monthPrev" title="Mês anterior">‹</button>
+            <input type="text" id="repMonthLabel" readonly style="min-width:150px;text-align:center;cursor:default;text-transform:capitalize">
+            <button id="monthNext" title="Próximo mês">›</button>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="gerarRelBtn">Gerar relatório</button>
+        <div class="spacer"></div>
+        <button class="btn btn-ghost hidden" id="copyRelBtn">📋 Copiar</button>
+      </div>
+      <div id="repBody">
+        <div class="state"><div class="big">📄</div>Selecione o cliente e o mês e clique em <b>Gerar relatório</b>.<br>
+          <span style="font-size:12px">O relatório segue o modelo que você salvar em ⚙️ Configurações.</span></div>
+      </div>
+    </section>
+
+    <!-- ============ HISTÓRICO ============ -->
+    <section id="view-historico" class="wrap hidden">
+      <div class="topbar">
+        <div class="field">
+          <label>Cliente</label>
+          <select id="histClientSel"></select>
+        </div>
+        <div class="spacer"></div>
+      </div>
+      <div id="histBody"></div>
+    </section>
+
+    <!-- ============ CONFIGURAÇÕES ============ -->
+    <section id="view-config" class="wrap hidden">
+      <div class="card">
+        <h2>🔄 Atualização do app</h2>
+        <p class="sub">Versão atual: <b id="appVersion">—</b>. Quando sair uma atualização, clique em verificar — baixa só o que mudou e reinicia (não precisa reinstalar).</p>
+        <div class="formrow">
+          <label>Link de atualização (repositório GitHub — base "raw")</label>
+          <input type="text" id="cfgUpdateUrl" placeholder="https://raw.githubusercontent.com/SEU-USUARIO/SEU-REPO/main">
+        </div>
+        <span class="help"><button class="chip-btn" id="updateCheckBtn">Verificar atualização</button> <span id="updateMsg"></span></span>
+      </div>
+
+      <div class="card">
+        <h2>Chaves de API</h2>
+        <p class="sub">Ficam guardadas só no seu computador. Nada sai daqui.</p>
+        <div class="formrow">
+          <label>Token do Reportei</label>
+          <input type="password" id="cfgReportei" placeholder="Bearer token — app.reportei.com → Configurações → API">
+        </div>
+        <div class="formrow">
+          <label>Trello — API Key</label>
+          <input type="password" id="cfgTrelloKey" placeholder="trello.com/app-key">
+        </div>
+        <div class="formrow">
+          <label>Trello — Token</label>
+          <input type="password" id="cfgTrelloToken" placeholder="token gerado a partir da API key">
+        </div>
+        <div class="formrow">
+          <label>Gemini — API Key</label>
+          <input type="password" id="cfgGemini" placeholder="Google AI Studio → Get API key">
+          <span class="help">Modelo: <input type="text" id="cfgGeminiModel" style="display:inline-block;width:200px;padding:4px 8px" placeholder="gemini-2.5-flash"></span>
+        </div>
+        <div class="formrow" style="border-top:1px solid var(--line);padding-top:14px">
+          <label>🤖 Motor de IA das análises</label>
+          <select id="cfgAiEngine" style="max-width:380px">
+            <option value="gemini">Gemini — rápido (~10s), usa a chave de API acima</option>
+            <option value="claude">Claude pelo seu plano — melhor qualidade, mas lento (~1-2min)</option>
+          </select>
+          <p class="sub" style="margin:6px 0 0">O motor escolhido é o principal; o outro entra de backup se falhar. Imagens (prints) usam sempre o Gemini.</p>
+          <span class="help"><button class="chip-btn" id="aiTestBtn">testar motor de IA</button> <span id="aiTestMsg"></span></span>
+        </div>
+        <div class="formrow">
+          <label>Google Sheets — API Key (pra ler cor verde / abas das planilhas de leads)</label>
+          <input type="password" id="cfgGoogleSheets" placeholder="API key do Google (Sheets API ativada)">
+        </div>
+        <div class="formrow">
+          <label>PageSpeed — API Key (pra avaliar velocidade do site na análise)</label>
+          <input type="password" id="cfgPageSpeed" placeholder="API key do Google (PageSpeed Insights API ativada)">
+        </div>
+        <button class="btn btn-primary" id="saveCfgBtn">Salvar chaves</button>
+      </div>
+
+      <div class="card">
+        <h2>🚀 Subida de campanhas (rascunhos nas plataformas)</h2>
+        <p class="sub">Cria campanhas e conjuntos <b>pausados</b> direto na conta do cliente, a partir da pré-estrutura do Funil Studio.</p>
+        <div class="formrow">
+          <label>Meta — Token de acesso (do seu app de desenvolvedor)</label>
+          <input type="password" id="cfgMetaToken" placeholder="EAAB... (token de longa duração com ads_management)">
+          <span class="help"><button class="chip-btn" id="metaTestBtn">testar conexão</button> <button class="chip-btn" id="metaPermBtn">verificar permissões</button> <span id="metaTestMsg"></span></span>
+          <div id="metaPermBox" style="margin-top:10px"></div>
+        </div>
+        <div class="formrow" style="border-top:1px solid var(--line);padding-top:14px">
+          <label>Google Ads — Developer Token (vem do Google Ads → MCC → Central de API)</label>
+          <input type="password" id="cfgGadsDev" placeholder="developer token">
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div class="formrow" style="flex:1;min-width:200px"><label>OAuth Client ID (do Google Cloud)</label><input type="password" id="cfgGadsCid" placeholder="xxxx.apps.googleusercontent.com"></div>
+          <div class="formrow" style="flex:1;min-width:160px"><label>OAuth Client Secret</label><input type="password" id="cfgGadsSec" placeholder="GOCSPX-..."></div>
+        </div>
+        <div class="formrow">
+          <label>MCC (login customer id)</label>
+          <input type="text" id="cfgGadsMcc" placeholder="123-456-7890" style="max-width:220px">
+        </div>
+        <span class="help">
+          <button class="chip-btn" id="gadsConnectBtn">🔗 Conectar com Google</button>
+          <span id="gadsConnMsg"></span>
+        </span>
+        <p class="sub" style="margin-top:6px">Cola o Client ID + Secret e clica em Conectar — o navegador abre pra você autorizar e o app guarda o acesso sozinho. <input type="hidden" id="cfgGadsRef"></p>
+        <span class="help"><button class="chip-btn" id="gadsTestBtn">testar conexão</button> <span id="gadsTestMsg"></span></span>
+        <p class="sub" style="margin-top:10px">LinkedIn: a API de criação exige aprovação no programa de parceiros — fica pra próxima fase.</p>
+      </div>
+
+      <div class="card">
+        <h2>🏷️ Google Tag Manager (conexão separada)</h2>
+        <p class="sub">Conecte o GTM com uma conta Google independente do Google Ads. Usa as mesmas credenciais OAuth do Google Cloud — não precisa de um app separado.</p>
+        <span class="help">
+          <button class="chip-btn" id="gtmConnectBtn">🔗 Conectar GTM</button>
+          <span id="gtmConnMsg"></span>
+        </span>
+        <p class="sub" style="margin-top:6px">Clica em Conectar — o navegador abre só com permissões do Tag Manager (sem Google Ads). O acesso fica guardado separado.</p>
+      </div>
+
+      <div class="card">
+        <h2>Modelo de relatório (do seu Obsidian)</h2>
+        <p class="sub">Cole aqui a estrutura que você usa nos relatórios — os temas (ex.: Investimento) e como você desenvolve cada um. Toda geração de relatório vai seguir esse modelo, preenchendo com as métricas do mês.</p>
+        <textarea id="cfgReportTemplate" placeholder="Ex.:&#10;Investimento&#10;(desenvolver: quanto foi investido no mês, comparativo, distribuição por canal...)&#10;&#10;Resultados&#10;(desenvolver: leads gerados, CPL, evolução...)" style="width:100%;min-height:200px;background:var(--panel-2);color:#cdd6e3;border:1px solid var(--line);border-radius:12px;padding:14px;font-size:13px;outline:none;resize:vertical"></textarea>
+        <button class="btn btn-primary" id="saveTemplateBtn" style="margin-top:12px">Salvar modelo</button>
+      </div>
+
+      <div class="card">
+        <h2>Meus clientes (projetos)</h2>
+        <p class="sub">Adicione clientes pelo <b>board do Trello</b> (criado quando o cliente entra) ou pelo projeto do Reportei. Os dados (Reportei/Meta/Google) você vincula depois.</p>
+        <div class="formrow">
+          <label>➕ Buscar board no Trello</label>
+          <input type="text" id="boardSearch" placeholder="Digite o nome do cliente e tecle Enter">
+          <div class="search-results" id="boardResults"></div>
+        </div>
+        <div class="formrow">
+          <label>Buscar projeto no Reportei</label>
+          <input type="text" id="projSearch" placeholder="Digite o nome do cliente e tecle Enter">
+          <div class="search-results" id="projResults"></div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="chip-btn" id="pullBudgetsBtn">📥 Puxar orçamentos do Trello (todos)</button>
+          <span id="pullBudgetsMsg" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+        <div class="section-title">Selecionados</div>
+        <div id="myClients"></div>
+      </div>
+    </section>
+
+    <!-- ============ META ADS — SESSÃO ============ -->
+    <section id="view-meta" class="wrap hidden">
+      <div class="topbar">
+        <div class="field">
+          <label>Conta Meta</label>
+          <select id="metaAccSel"><option value="">— selecione —</option></select>
+          <button class="chip-btn" style="margin-left:8px" id="metaAccRefresh">↺ carregar contas</button>
+        </div>
+        <div class="field">
+          <label>Período</label>
+          <div class="weeknav">
+            <button class="chip-btn sess-period active" data-days="7">7d</button>
+            <button class="chip-btn sess-period" data-days="14">14d</button>
+            <button class="chip-btn sess-period" data-days="30">30d</button>
+            <button class="chip-btn sess-period-custom" id="metaCustomToggle" title="Datas específicas">📅</button>
+          </div>
+        </div>
+        <div class="field hidden" id="metaCustomRange">
+          <label>Datas específicas</label>
+          <div class="weeknav">
+            <input type="date" id="metaStart" style="min-width:140px">
+            <span style="color:var(--muted)">→</span>
+            <input type="date" id="metaEnd" style="min-width:140px">
+          </div>
+        </div>
+        <div class="field">
+          <label>Filtro</label>
+          <label class="sess-check"><input type="checkbox" id="metaOnlyActive"> Só ativos</label>
+        </div>
+        <button class="btn btn-primary" id="metaLoadBtn">Carregar</button>
+      </div>
+
+      <div id="metaSessMetrics" class="sess-metrics hidden">
+        <div class="sess-card"><div class="sess-val" id="mGasto">—</div><div class="sess-lbl">Gasto</div></div>
+        <div class="sess-card"><div class="sess-val" id="mLeads">—</div><div class="sess-lbl">Leads</div></div>
+        <div class="sess-card"><div class="sess-val" id="mCpl">—</div><div class="sess-lbl">CPL</div></div>
+        <div class="sess-card"><div class="sess-val" id="mClicks">—</div><div class="sess-lbl">Cliques</div></div>
+        <div class="sess-card"><div class="sess-val" id="mImpr">—</div><div class="sess-lbl">Impressões</div></div>
+      </div>
+
+      <div id="metaAnalysisBox" class="hidden" style="margin-top:16px"></div>
+
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h2 style="margin:0">Campanhas</h2>
+          <div>
+            <button class="btn btn-primary" id="metaAnalyzeBtn" style="margin-right:8px">📊 Analisar semana + Trello</button>
+            <button class="chip-btn" id="metaNewCampBtn">+ Nova campanha</button>
+          </div>
+        </div>
+        <div id="metaCampBody"><div class="state">Selecione uma conta e clique em Carregar.</div></div>
+      </div>
+    </section>
+
+    <!-- ============ GOOGLE ADS — SESSÃO ============ -->
+    <section id="view-gads" class="wrap hidden">
+      <div class="topbar">
+        <div class="field">
+          <label>Conta Google Ads</label>
+          <select id="gadsAccSel"><option value="">— selecione —</option></select>
+        </div>
+        <div class="field">
+          <label>Período</label>
+          <div class="weeknav">
+            <button class="chip-btn sess-period-g active" data-days="7">7d</button>
+            <button class="chip-btn sess-period-g" data-days="14">14d</button>
+            <button class="chip-btn sess-period-g" data-days="30">30d</button>
+            <button class="chip-btn sess-period-g-custom" id="gadsCustomToggle" title="Datas específicas">📅</button>
+          </div>
+        </div>
+        <div class="field hidden" id="gadsCustomRange">
+          <label>Datas específicas</label>
+          <div class="weeknav">
+            <input type="date" id="gadsStart" style="min-width:140px">
+            <span style="color:var(--muted)">→</span>
+            <input type="date" id="gadsEnd" style="min-width:140px">
+          </div>
+        </div>
+        <div class="field">
+          <label>Filtro</label>
+          <label class="sess-check"><input type="checkbox" id="gadsOnlyActive"> Só ativos</label>
+        </div>
+        <button class="btn btn-primary" id="gadsLoadBtn">Carregar</button>
+      </div>
+
+      <div id="gadsSessMetrics" class="sess-metrics hidden">
+        <div class="sess-card"><div class="sess-val" id="gGasto">—</div><div class="sess-lbl">Gasto</div></div>
+        <div class="sess-card"><div class="sess-val" id="gConv">—</div><div class="sess-lbl">Conversões</div></div>
+        <div class="sess-card"><div class="sess-val" id="gCpa">—</div><div class="sess-lbl">CPA</div></div>
+        <div class="sess-card"><div class="sess-val" id="gCpc">—</div><div class="sess-lbl">CPC médio</div></div>
+        <div class="sess-card"><div class="sess-val" id="gClicks">—</div><div class="sess-lbl">Cliques</div></div>
+      </div>
+
+      <div id="gadsAnalysisBox" class="hidden" style="margin-top:16px"></div>
+
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h2 style="margin:0">Campanhas</h2>
+          <div>
+            <button class="btn btn-primary" id="gadsAnalyzeBtn" style="margin-right:8px">📊 Analisar semana + Trello</button>
+            <button class="chip-btn" id="gadsNewCampBtn">+ Nova campanha</button>
+          </div>
+        </div>
+        <div id="gadsCampBody"><div class="state">Selecione uma conta e clique em Carregar.</div></div>
+      </div>
+    </section>
+
+    <!-- ============ TAG MANAGER ============ -->
+    <section id="view-gtm" class="wrap hidden">
+      <div class="topbar">
+        <div class="field">
+          <label>Container</label>
+          <select id="gtmContSel"><option value="">— selecione —</option></select>
+          <button class="chip-btn" style="margin-left:8px" id="gtmContLoad">↺ carregar containers</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <h2>Configuração rápida</h2>
+        <p class="sub">Configure eventos de rastreamento no container selecionado. A IA analisa a página e sugere os eventos — você confirma antes de criar.</p>
+        <div class="formrow">
+          <label>URL da página para analisar</label>
+          <input type="text" id="gtmPageUrl" placeholder="https://cliente.com.br/contato">
+        </div>
+        <div class="formrow">
+          <label>Measurement ID do GA4</label>
+          <input type="text" id="gtmMeasId" placeholder="G-XXXXXXXXXX">
+        </div>
+        <div class="formrow">
+          <label>Screenshot da página (opcional — ajuda a IA identificar botões)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="chip-btn" id="gtmPickImg">📂 Escolher imagem</button>
+            <span id="gtmImgName" class="sub"></span>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="gtmSmartBtn">✨ Analisar e sugerir eventos</button>
+        <div id="gtmSugestBox" style="margin-top:16px"></div>
+      </div>
+
+      <div class="card">
+        <h2>Eventos sugeridos</h2>
+        <p class="sub" id="gtmEvDesc">Após analisar a página, os eventos aparecem aqui para você revisar e criar no GTM.</p>
+        <div id="gtmEvBox"></div>
+        <button class="btn btn-primary hidden" id="gtmCreateBtn" style="margin-top:12px">Criar eventos selecionados no GTM</button>
+        <div id="gtmResultBox" style="margin-top:12px"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
