@@ -2500,16 +2500,109 @@ ipcMain.handle("gtm:setup", async (_e, { containerPath, events }) => {
   return results;
 });
 
-ipcMain.handle("gtm:smartSetup", async (_e, { html, screenshot, containerPath, measurementId }) => {
+// --- helpers do GTM smart setup ---
+function gtmHtmlText(s) {
+  return String(s || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim();
+}
+function gtmAttr(tag, name) {
+  const m = tag.match(new RegExp(name + '\\s*=\\s*"([^"]*)"', "i")) || tag.match(new RegExp(name + "\\s*=\\s*'([^']*)'", "i"));
+  return m ? m[1].trim() : "";
+}
+// extrai os elementos clicáveis REAIS da página (links, botões, CTAs, formulários)
+function gtmExtractClickables(html) {
+  const out = [];
+  const seen = new Set();
+  const push = (tag, openTag, inner, hrefOverride) => {
+    const id = gtmAttr(openTag, "id");
+    const cls = gtmAttr(openTag, "class");
+    const href = hrefOverride != null ? hrefOverride : gtmAttr(openTag, "href");
+    let text = gtmHtmlText(inner).slice(0, 80);
+    if (!text) text = gtmAttr(openTag, "aria-label") || gtmAttr(openTag, "value") || gtmAttr(openTag, "title") || "";
+    if (!text && !id && !cls && !href) return;
+    const key = tag + "|" + id + "|" + cls + "|" + text + "|" + href;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ tag, id, cls, text, href });
+  };
+  let m;
+  const aRe = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  while ((m = aRe.exec(html))) push("a", m[1], m[2]);
+  const bRe = /<button\b([^>]*)>([\s\S]*?)<\/button>/gi;
+  while ((m = bRe.exec(html))) push("button", m[1], m[2]);
+  const iRe = /<input\b([^>]*)>/gi;
+  while ((m = iRe.exec(html))) { const t = gtmAttr(m[1], "type").toLowerCase(); if (t === "submit" || t === "button") push("input", m[1], "", ""); }
+  const fRe = /<form\b([^>]*)>/gi;
+  while ((m = fRe.exec(html))) push("form", m[1], "", "");
+  return out;
+}
+// extrai um array JSON completo respeitando colchetes dentro de strings (ex.: selector "a[href]")
+function gtmExtractJsonArray(text) {
+  const t = String(text || "");
+  const start = t.indexOf("[");
+  if (start < 0) return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < t.length; i++) {
+    const c = t[i];
+    if (esc) { esc = false; continue; }
+    if (c === "\\") { esc = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === "[") depth++;
+    else if (c === "]") { depth--; if (depth === 0) return t.slice(start, i + 1); }
+  }
+  return null;
+}
+// recuperação se a IA cortar a resposta no meio (trunca): fecha no último objeto completo
+function gtmSalvageJsonArray(text) {
+  const t = String(text || "");
+  const start = t.indexOf("[");
+  const lastObj = t.lastIndexOf("}");
+  if (start < 0 || lastObj < start) return null;
+  return t.slice(start, lastObj + 1) + "]";
+}
+
+ipcMain.handle("gtm:smartSetup", async (_e, { url, html, screenshot, containerPath, measurementId }) => {
   const s = readStore().settings;
+  // 1) busca o HTML REAL da página (não confia em HTML vindo do front)
+  let pageHtml = html || "";
+  if (url) {
+    try {
+      const u = /^https?:\/\//.test(url) ? url : "https://" + url;
+      pageHtml = await fetch(u, { headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" } }).then((r) => r.text());
+    } catch (e) {
+      if (!pageHtml) throw new Error("Não consegui abrir a página. Confira o link: " + url);
+    }
+  }
+  if (!pageHtml && !screenshot) throw new Error("Informe a URL da página (ou anexe um print).");
+
+  // 2) extrai os elementos clicáveis reais e monta um catálogo enxuto pra IA
+  const clickables = gtmExtractClickables(pageHtml).slice(0, 60);
+  const catalog = clickables.map((c, i) =>
+    `${i + 1}. <${c.tag}>${c.id ? ` id="${c.id}"` : ""}${c.cls ? ` class="${c.cls}"` : ""}${c.href ? ` href="${c.href}"` : ""} → "${c.text}"`
+  ).join("\n");
+
   const imgs = screenshot ? [{ data: screenshot.replace(/^data:[^;]+;base64,/, ""), mimeType: "image/png" }] : [];
-  const prompt = `Você é especialista em Google Tag Manager e analytics. Analise o HTML/screenshot desta página e identifique os elementos que DEVEM ser rastreados como eventos GA4 (formulários, botões de CTA, links de contato, etc.).\n\nRetorne SOMENTE um array JSON válido:\n[\n  { "name": "Nome legível do evento", "eventName": "nome_snake_case", "selector": "CSS selector preciso", "description": "O que captura" }\n]\n\nUse seletores específicos: prefira #id, depois .classe-específica, depois [data-attr]. Não crie eventos para cliques genéricos ou navegação padrão.\n\nHTML (primeiros 6000 chars):\n${(html || "").slice(0, 6000)}`;
+  const prompt = `Você é especialista em Google Tag Manager e GA4. Abaixo está a LISTA REAL de elementos clicáveis (links, botões, CTAs, formulários) extraídos do HTML desta página. Escolha APENAS os que valem como conversão/evento: enviar formulário, clicar em WhatsApp, "Comprar/Orçamento/Falar com consultor/Agendar", clicar em telefone (tel:) ou e-mail (mailto:). IGNORE menu, navegação interna, rodapé e redes sociais genéricas.
+
+Para "selector" use SOMENTE o que existe no elemento real: prefira #id (se tiver id), senão .classe (uma classe específica e única do elemento), senão o texto exato do botão. Para links use o próprio href quando for tel:/mailto:/wa.me.
+
+Responda SOMENTE com um array JSON válido e COMPLETO, sem nada antes ou depois, sem markdown:
+[{"name":"Nome legível","eventName":"nome_snake_case","selector":"#id ou .classe ou texto","description":"o que captura"}]
+
+LISTA DE ELEMENTOS:
+${catalog || "(nenhum elemento extraído do HTML — use o print anexado)"}`;
+
   const raw = await aiAnalyze(s, prompt, imgs);
-  const match = raw.match(/\[[\s\S]*?\]/);
-  if (!match) throw new Error("IA não retornou eventos válidos. Tente de novo ou configure manualmente.");
-  const events = JSON.parse(match[0]).map((e) => ({ ...e, measurementId }));
+  let arr = gtmExtractJsonArray(raw) || gtmSalvageJsonArray(raw);
+  if (!arr) throw new Error("A IA não retornou eventos. Tente de novo (ou anexe um print da página).");
+  let events;
+  try { events = JSON.parse(arr); }
+  catch (e) {
+    const salv = gtmSalvageJsonArray(raw);
+    try { events = JSON.parse(salv); } catch { throw new Error("Não consegui ler a resposta da IA. Tente novamente."); }
+  }
   // não configura automaticamente — devolve a sugestão pro usuário confirmar
-  return events;
+  return (Array.isArray(events) ? events : []).map((e) => ({ ...e, measurementId }));
 });
 
 /* ---------------------------------------------------------- */

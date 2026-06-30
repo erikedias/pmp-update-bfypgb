@@ -1,6 +1,6 @@
 {
-  "version": "1.1.0",
-  "notes": "Minha Semana (rotina por call, pacing, feito/pendências), análise por plataforma, criativos e orçamento via Trello, kickoff→persona, palavras-chave com negativas, salvar no Obsidian, atalhos Google/Meta e tarefas no Ekyte",
+  "version": "1.2.0",
+  "notes": "GTM Configuração rápida agora lê a página de verdade e sugere eventos (botões/CTAs/formulários reais); enviar palavras-chave adicionadas pro Trello (não só negativadas); termos de busca com período por datas específicas",
   "files": [
     "src/app.js",
     "src/engine.js",

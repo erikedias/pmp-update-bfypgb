@@ -184,7 +184,14 @@
             <option value="7">Últimos 7 dias</option>
             <option value="14">Últimos 14 dias</option>
             <option value="30" selected>Últimos 30 dias</option>
+            <option value="custom">Datas específicas…</option>
           </select>
+        </div>
+        <div class="field hidden" id="termCustomDates"><label>De / até</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="date" id="termStart" style="min-width:140px">
+            <input type="date" id="termEnd" style="min-width:140px">
+          </div>
         </div>
         <button class="btn btn-primary" id="termBtn">Analisar termos</button>
         <div class="spacer"></div>

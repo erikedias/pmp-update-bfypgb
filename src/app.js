@@ -1877,17 +1877,36 @@ function copyKw(kind) {
    ============================================================ */
 function termClient() { return state.clients.find((c) => c.projectId === Number($("#termClientSel").value)) || null; }
 
+// período personalizado: mostra/esconde os campos de data
+$("#termPeriod").addEventListener("change", (e) => {
+  const custom = e.target.value === "custom";
+  $("#termCustomDates").classList.toggle("hidden", !custom);
+  if (custom && !$("#termEnd").value) {
+    const iso = (d) => d.toISOString().slice(0, 10);
+    const end = new Date(); const start = new Date(); start.setDate(end.getDate() - 7);
+    $("#termStart").value = iso(start); $("#termEnd").value = iso(end);
+  }
+});
+
 $("#termBtn").addEventListener("click", async () => {
   const c = termClient(); const body = $("#termBody");
   const gid = c && c.adAccounts && c.adAccounts.google;
   if (!gid) { body.innerHTML = `<div class="state error"><div class="big">⚠️</div>Vincule a conta Google deste cliente em ⚙️ Configurações → "contas".</div>`; return; }
-  const days = Number($("#termPeriod").value);
-  const end = new Date(); const start = new Date(); start.setDate(end.getDate() - days);
   const iso = (d) => d.toISOString().slice(0, 10);
+  let startIso, endIso;
+  if ($("#termPeriod").value === "custom") {
+    startIso = $("#termStart").value; endIso = $("#termEnd").value;
+    if (!startIso || !endIso) { body.innerHTML = `<div class="state error"><div class="big">📅</div>Escolha as duas datas (de e até).</div>`; return; }
+    if (startIso > endIso) { const t = startIso; startIso = endIso; endIso = t; }
+  } else {
+    const days = Number($("#termPeriod").value);
+    const end = new Date(); const start = new Date(); start.setDate(end.getDate() - days);
+    startIso = iso(start); endIso = iso(end);
+  }
   body.innerHTML = `<div class="state"><div class="big">⏳</div>Puxando os termos de busca do Google…</div>`;
   $("#termNegBtn").classList.add("hidden");
   try {
-    const terms = await window.api.googleAdsSearchTerms({ customerId: gid, start: iso(start), end: iso(end) });
+    const terms = await window.api.googleAdsSearchTerms({ customerId: gid, start: startIso, end: endIso });
     if (!terms.length) { body.innerHTML = `<div class="state"><div class="big">🔎</div>Nenhum termo de busca no período (só campanhas de Pesquisa geram esses dados).</div>`; return; }
     const service = termServico(c);
     body.innerHTML = `<div class="state"><div class="big">🤖</div>A IA está avaliando ${terms.length} termos com base no que o cliente faz…</div>`;
@@ -2203,7 +2222,7 @@ async function renderHistory() {
     + actions.map((a, ai) => `<div class="hist-item" style="cursor:default">
         <div style="flex:1"><div class="hist-week">${a.type === "negativacao" ? "🚫" : a.type === "keyword" ? "➕" : a.type === "toggle" ? "⚙️" : a.type === "creative" ? "🎨" : a.type === "ekyte" ? "📋" : "•"} ${a.summary}</div>
           <div class="hist-meta">${new Date(a.at).toLocaleString("pt-BR")}${a.detail ? " · " + (a.detail.length > 120 ? a.detail.slice(0, 120) + "…" : a.detail) : ""}</div></div>
-        ${a.type === "negativacao" ? `<button class="chip-btn act-trello" data-ai="${ai}">📋 Enviar pro Trello</button>` : ""}
+        ${(a.type === "negativacao" || a.type === "keyword") ? `<button class="chip-btn act-trello" data-ai="${ai}">📋 Enviar pro Trello</button>` : ""}
       </div>`).join("") : "";
   state._actions = actions;
   const weeksHtml = list.length ? `<div class="section-title">📅 Semanas analisadas</div><div class="hist-list">` + list.map((h) => `
@@ -2222,8 +2241,15 @@ async function renderHistory() {
     if (!terms.length) { toast("Sem termos nesta ação.", true); return; }
     b.disabled = true; b.textContent = "Enviando…";
     const dia = new Date(a.at).toLocaleDateString("pt-BR");
+    const isKw = a.type === "keyword";
     try {
-      const r = await window.api.trelloDoneCard({ boardId: c.trelloBoardId, title: `Termos negativados — ${dia}`, desc: `${terms.length} termo(s) negativado(s) no Google Ads.`, checklistName: "Termos negativados", items: terms });
+      const r = await window.api.trelloDoneCard({
+        boardId: c.trelloBoardId,
+        title: isKw ? `Palavras-chave adicionadas — ${dia}` : `Termos negativados — ${dia}`,
+        desc: isKw ? `${terms.length} palavra(s)-chave adicionada(s) no Google Ads.` : `${terms.length} termo(s) negativado(s) no Google Ads.`,
+        checklistName: isKw ? "Palavras-chave adicionadas" : "Termos negativados",
+        items: terms,
+      });
       b.textContent = "✓ no Trello";
       toast("Card criado em 'O que foi feito'!");
       if (r.url) setTimeout(() => window.api.openExternal(r.url), 400);
@@ -2955,13 +2981,10 @@ $("#gtmSmartBtn").addEventListener("click", async () => {
   const url = $("#gtmPageUrl").value.trim();
   const measId = $("#gtmMeasId").value.trim();
   const box = $("#gtmSugestBox");
-  box.innerHTML = '<div class="state">⏳ IA analisando a página…</div>';
+  if (!url && !gtmImgData) { toast("Informe a URL da página (ou anexe um print).", true); return; }
+  box.innerHTML = '<div class="state">⏳ Lendo a página e sugerindo eventos…</div>';
   try {
-    let html = "";
-    if (url) {
-      try { html = await window.api.geminiRaw({ prompt: `Retorne só o HTML da página ${url} (nada mais, sem explicação).` }); } catch {}
-    }
-    const events = await window.api.gtmSmartSetup({ html, screenshot: gtmImgData, containerPath, measurementId: measId });
+    const events = await window.api.gtmSmartSetup({ url, screenshot: gtmImgData, containerPath, measurementId: measId });
     gtmSuggestedEvents = events;
     renderGtmSuggestions(events, containerPath);
     box.innerHTML = "";
