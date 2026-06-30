@@ -78,6 +78,7 @@
         <button class="btn btn-primary" id="analisarBtn">Analisar semana</button>
         <div class="spacer"></div>
         <button class="btn btn-purple hidden" id="enviarBtn">📤 Enviar pro Trello</button>
+        <button class="btn btn-ghost hidden" id="enviarEkyteBtn" style="margin-left:8px">📋 Enviar pro Ekyte</button>
       </div>
 
       <div id="painelBody">
@@ -310,22 +311,22 @@
 
       <div class="card">
         <h2>Chaves de API</h2>
-        <p class="sub">Ficam guardadas só no seu computador. Nada sai daqui.</p>
+        <p class="sub">Ficam guardadas só no seu computador. Nada sai daqui. Clique em <b>"onde pegar ↗"</b> ao lado de cada uma se não souber onde achar.</p>
         <div class="formrow">
-          <label>Token do Reportei</label>
-          <input type="password" id="cfgReportei" placeholder="Bearer token — app.reportei.com → Configurações → API">
+          <label>Token do Reportei <a class="ext" href="https://app.reportei.com/empresa/api" style="font-size:11px;color:var(--accent);margin-left:6px;text-decoration:none">onde pegar ↗</a></label>
+          <input type="password" id="cfgReportei" placeholder="app.reportei.com → Configurações da empresa → API Reportei">
         </div>
         <div class="formrow">
-          <label>Trello — API Key</label>
-          <input type="password" id="cfgTrelloKey" placeholder="trello.com/app-key">
+          <label>Trello — API Key <a class="ext" href="https://trello.com/power-ups/admin" style="font-size:11px;color:var(--accent);margin-left:6px;text-decoration:none">onde pegar ↗</a></label>
+          <input type="password" id="cfgTrelloKey" placeholder="trello.com/power-ups/admin → crie um Power-Up → API key">
         </div>
         <div class="formrow">
-          <label>Trello — Token</label>
-          <input type="password" id="cfgTrelloToken" placeholder="token gerado a partir da API key">
+          <label>Trello — Token <a class="ext" href="https://trello.com/power-ups/admin" style="font-size:11px;color:var(--accent);margin-left:6px;text-decoration:none">onde pegar ↗</a></label>
+          <input type="password" id="cfgTrelloToken" placeholder="na mesma página da API Key, clique em 'Token' e autorize">
         </div>
         <div class="formrow">
-          <label>Gemini — API Key</label>
-          <input type="password" id="cfgGemini" placeholder="Google AI Studio → Get API key">
+          <label>Gemini — API Key <a class="ext" href="https://aistudio.google.com/app/apikey" style="font-size:11px;color:var(--accent);margin-left:6px;text-decoration:none">onde pegar ↗</a></label>
+          <input type="password" id="cfgGemini" placeholder="aistudio.google.com → Get API key">
           <span class="help">Modelo: <input type="text" id="cfgGeminiModel" style="display:inline-block;width:200px;padding:4px 8px" placeholder="gemini-2.5-flash"></span>
         </div>
         <div class="formrow" style="border-top:1px solid var(--line);padding-top:14px">
@@ -338,31 +339,73 @@
           <span class="help"><button class="chip-btn" id="aiTestBtn">testar motor de IA</button> <span id="aiTestMsg"></span></span>
         </div>
         <div class="formrow">
-          <label>Google Sheets — API Key (pra ler cor verde / abas das planilhas de leads)</label>
-          <input type="password" id="cfgGoogleSheets" placeholder="API key do Google (Sheets API ativada)">
+          <label>Google Sheets — API Key (pra ler cor verde / abas das planilhas de leads) <a class="ext" href="https://console.cloud.google.com/apis/credentials" style="font-size:11px;color:var(--accent);margin-left:6px;text-decoration:none">onde pegar ↗</a></label>
+          <input type="password" id="cfgGoogleSheets" placeholder="console.cloud.google.com → Credenciais → Criar chave de API (ative a Sheets API)">
         </div>
         <div class="formrow">
-          <label>PageSpeed — API Key (pra avaliar velocidade do site na análise)</label>
-          <input type="password" id="cfgPageSpeed" placeholder="API key do Google (PageSpeed Insights API ativada)">
+          <label>PageSpeed — API Key (pra avaliar velocidade do site na análise) <a class="ext" href="https://console.cloud.google.com/apis/credentials" style="font-size:11px;color:var(--accent);margin-left:6px;text-decoration:none">onde pegar ↗</a></label>
+          <input type="password" id="cfgPageSpeed" placeholder="console.cloud.google.com → Credenciais (ative a PageSpeed Insights API)">
         </div>
         <button class="btn btn-primary" id="saveCfgBtn">Salvar chaves</button>
+      </div>
+
+      <div class="card">
+        <h2>📋 Ekyte (tarefas internas do time)</h2>
+        <p class="sub">Vincula o Ekyte pra que, ao enviar as demandas da semana, as otimizações também virem <b>tarefas</b> pro analista executar (antes da call) e a P.O receber. <span id="ekyteMsg" style="color:var(--accent)"></span></p>
+        <div class="formrow">
+          <label>Ekyte — API Key <a class="ext" href="https://app.ekyte.com" style="font-size:11px;color:var(--accent);margin-left:6px;text-decoration:none">onde pegar ↗</a></label>
+          <input type="password" id="cfgEkyteKey" placeholder="Ekyte → Configurações → API → Gerar nova chave">
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div class="formrow" style="flex:1;min-width:220px"><label>Seu email no Ekyte (executor/analista)</label><input type="text" id="cfgEkyteAnalyst" placeholder="voce@agencia.com"></div>
+          <div class="formrow" style="flex:1;min-width:220px"><label>Email da sua P.O (quem recebe)</label><input type="text" id="cfgEkytePo" placeholder="po@agencia.com"></div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div class="formrow" style="max-width:200px"><label>ID da empresa (Ekyte Matriz)</label><input type="text" id="cfgEkyteCompany" placeholder="ex.: 16261"></div>
+          <div class="formrow" style="flex:1;min-width:240px"><label>Tipo de tarefa (otimização/performance)</label>
+            <select id="cfgEkyteTaskType" style="width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--txt)"><option value="">— carregue os tipos —</option></select>
+          </div>
+          <button class="chip-btn" id="ekyteLoadTypesBtn" style="margin-bottom:2px">↻ carregar tipos</button>
+        </div>
+        <div class="formrow" style="border-top:1px solid var(--line);padding-top:14px">
+          <label>⚡ Zapier MCP — URL do servidor (recomendado: não gasta tasks do plano)</label>
+          <input type="text" id="cfgEkyteMcpUrl" placeholder="https://mcp.zapier.com/api/mcp/s/.../mcp">
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div class="formrow" style="flex:1;min-width:260px"><label>Zapier MCP — Token de conexão</label><input type="password" id="cfgEkyteMcpToken" placeholder="token gerado na aba Connect do Zapier MCP"></div>
+          <button class="chip-btn" id="ekyteMcpTestBtn" style="margin-bottom:2px">testar MCP</button>
+        </div>
+        <p class="sub" style="margin:2px 0 0">No <b>mcp.zapier.app</b>: crie um servidor, adicione a ação <b>eKyte → Create Task</b> e gere a URL + token na aba <b>Connect</b>. <span id="ekyteMcpMsg" style="color:var(--accent)"></span></p>
+        <div id="ekyteMcpBox" style="margin-top:8px"></div>
+        <details style="margin-top:10px"><summary class="sub" style="cursor:pointer">Alternativa: webhook (Catch Hook) — usa tasks do plano</summary>
+          <div class="formrow" style="margin-top:8px">
+            <label>URL do webhook (Zapier)</label>
+            <input type="text" id="cfgEkyteWebhook" placeholder="https://hooks.zapier.com/hooks/catch/...">
+          </div>
+        </details>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-primary" id="saveEkyteBtn" style="padding:8px 14px">Salvar Ekyte</button>
+          <button class="chip-btn" id="ekyteTestBtn">testar conexão</button>
+          <span id="ekyteTestMsg" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+        <div id="ekyteInfoBox" style="margin-top:10px"></div>
       </div>
 
       <div class="card">
         <h2>🚀 Subida de campanhas (rascunhos nas plataformas)</h2>
         <p class="sub">Cria campanhas e conjuntos <b>pausados</b> direto na conta do cliente, a partir da pré-estrutura do Funil Studio.</p>
         <div class="formrow">
-          <label>Meta — Token de acesso (do seu app de desenvolvedor)</label>
+          <label>Meta — Token de acesso (do seu app de desenvolvedor) <a class="ext" href="https://developers.facebook.com/tools/explorer/" style="font-size:11px;color:var(--accent);margin-left:6px;text-decoration:none">onde pegar ↗</a></label>
           <input type="password" id="cfgMetaToken" placeholder="EAAB... (token de longa duração com ads_management)">
           <span class="help"><button class="chip-btn" id="metaTestBtn">testar conexão</button> <button class="chip-btn" id="metaPermBtn">verificar permissões</button> <span id="metaTestMsg"></span></span>
           <div id="metaPermBox" style="margin-top:10px"></div>
         </div>
         <div class="formrow" style="border-top:1px solid var(--line);padding-top:14px">
-          <label>Google Ads — Developer Token (vem do Google Ads → MCC → Central de API)</label>
+          <label>Google Ads — Developer Token (vem do Google Ads → MCC → Central de API) <a class="ext" href="https://ads.google.com/aw/apicenter" style="font-size:11px;color:var(--accent);margin-left:6px;text-decoration:none">onde pegar ↗</a></label>
           <input type="password" id="cfgGadsDev" placeholder="developer token">
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <div class="formrow" style="flex:1;min-width:200px"><label>OAuth Client ID (do Google Cloud)</label><input type="password" id="cfgGadsCid" placeholder="xxxx.apps.googleusercontent.com"></div>
+          <div class="formrow" style="flex:1;min-width:200px"><label>OAuth Client ID (do Google Cloud) <a class="ext" href="https://console.cloud.google.com/apis/credentials" style="font-size:11px;color:var(--accent);margin-left:6px;text-decoration:none">onde pegar ↗</a></label><input type="password" id="cfgGadsCid" placeholder="xxxx.apps.googleusercontent.com"></div>
           <div class="formrow" style="flex:1;min-width:160px"><label>OAuth Client Secret</label><input type="password" id="cfgGadsSec" placeholder="GOCSPX-..."></div>
         </div>
         <div class="formrow">

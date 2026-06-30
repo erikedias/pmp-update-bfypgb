@@ -15,7 +15,7 @@ const os = require("os");
 /* ---------------------------------------------------------- */
 const STORE_PATH = () => path.join(app.getPath("userData"), "store.json");
 const DEFAULT_STORE = {
-  settings: { reporteiToken: "", trelloKey: "", trelloToken: "", geminiKey: "", geminiModel: "gemini-2.5-flash", aiEngine: "gemini", reportTemplate: "", googleSheetsKey: "", metaToken: "", googleAdsDevToken: "", googleAdsClientId: "", googleAdsClientSecret: "", googleAdsRefreshToken: "", googleAdsLoginCustomerId: "", googleAdsApiVersion: "", pageSpeedKey: "", updateBaseUrl: "https://raw.githubusercontent.com/erikedias/pmp-update-bfypgb/main" },
+  settings: { reporteiToken: "", trelloKey: "", trelloToken: "", geminiKey: "", geminiModel: "gemini-2.5-flash", aiEngine: "gemini", reportTemplate: "", googleSheetsKey: "", metaToken: "", googleAdsDevToken: "", googleAdsClientId: "", googleAdsClientSecret: "", googleAdsRefreshToken: "", googleAdsLoginCustomerId: "", googleAdsApiVersion: "", pageSpeedKey: "", updateBaseUrl: "https://raw.githubusercontent.com/erikedias/pmp-update-bfypgb/main", ekyteKey: "", ekyteAnalystEmail: "", ekytePoEmail: "", ekyteTaskTypeId: "", ekyteWorkspaceId: "", ekyteCompanyId: "", ekyteWebhookUrl: "", ekyteMcpUrl: "", ekyteMcpToken: "", ekyteMcpTool: "" },
   clients: [], // [{projectId, name, trelloBoardId, trelloBoardName}]
   history: [], // [{id, projectId, clientName, weekLabel, start, end, savedAt, platformResults, items, analysisText, trello}]
   actions: [], // [{id, at, projectId, clientName, type, summary, detail}]
@@ -2086,6 +2086,164 @@ ipcMain.handle("trello:doneCard", async (_e, { boardId, title, desc, items }) =>
   const full = (desc || "") + (items && items.length ? "\n\n" + items.map((t) => `- ${t}`).join("\n") : "");
   const card = await trelloCreateCard(s, feitosId, title, full);
   return { url: card.shortUrl || card.url };
+});
+
+/* ---- Ekyte (tarefas internas do time) — REST api.ekyte.com, auth ?apiKey=Bearer <token>
+   versões por endpoint: users/workspaces/task-types/projects = v1.0 · tasks = v1.2 ---- */
+const EKYTE = "https://api.ekyte.com";
+// auth correta (conta Matriz): ?apiKey=<token> sem "Bearer" + companyId quando configurado
+async function ekyteApi(s, pathQ, opts = {}) {
+  if (!s.ekyteKey) throw new Error("Configure a API Key do Ekyte.");
+  const token = String(s.ekyteKey).replace(/^Bearer\s+/i, "").trim();
+  const sep = pathQ.includes("?") ? "&" : "?";
+  const cid = s.ekyteCompanyId ? `&companyId=${encodeURIComponent(s.ekyteCompanyId)}` : "";
+  const url = `${EKYTE}/${pathQ}${sep}apiKey=${encodeURIComponent(token)}${cid}`;
+  return httpJson(url, { headers: { "Content-Type": "application/json" }, ...opts });
+}
+// lista workspaces / tipos de tarefa / usuários (id + nome) da empresa pra configurar a criação de tarefas
+const ekyteList = (r) => {
+  const arr = Array.isArray(r) ? r : (r && (r.data || r.items || r.results || r.records)) || [];
+  if (!Array.isArray(arr)) return r;
+  return arr.slice(0, 80).map((x) => ({ id: x.id != null ? x.id : x.workspaceId, nome: x.name || x.title || x.description || x.email || x.fullName || "" }));
+};
+ipcMain.handle("ekyte:test", async () => {
+  const s = readStore().settings;
+  if (!s.ekyteKey) throw new Error("Cole a API Key do Ekyte primeiro.");
+  if (!s.ekyteCompanyId) throw new Error("Informe o ID da empresa (Matriz) e salve.");
+  const out = {};
+  for (const [k, p] of [["WORKSPACES", "v1.0/workspaces"], ["TIPOS_DE_TAREFA", "v1.0/task-types"], ["usuarios", "v1.0/users"]]) {
+    try { out[k] = ekyteList(await ekyteApi(s, `${p}?page=1`)); } catch (e) { out[k + "_erro"] = e.message; }
+  }
+  return out;
+});
+// lista os tipos de tarefa (pro seletor da config)
+ipcMain.handle("ekyte:taskTypes", async () => ekyteList(await ekyteApi(readStore().settings, "v1.0/task-types?page=1")));
+
+/* ---- Zapier MCP (Streamable HTTP, JSON-RPC 2.0) — chama a ação "Create Task" sem montar Zap ---- */
+function parseMcpBody(text) {
+  if (!text) return null;
+  if (text.trimStart().startsWith("{")) { try { return JSON.parse(text); } catch {} }
+  let found = null; // SSE: pega a última linha "data: {...}" que tenha result/error
+  for (const line of text.split("\n")) {
+    const t = line.trim();
+    if (!t.startsWith("data:")) continue;
+    try { const o = JSON.parse(t.slice(5).trim()); if (o.result || o.error || o.jsonrpc) found = o; } catch {}
+  }
+  return found;
+}
+async function mcpRpc(url, token, method, params, sessionId, isNotif) {
+  const headers = { "Content-Type": "application/json", "Accept": "application/json, text/event-stream" };
+  if (token) headers.Authorization = "Bearer " + String(token).replace(/^Bearer\s+/i, "").trim();
+  if (sessionId) headers["Mcp-Session-Id"] = sessionId;
+  const body = { jsonrpc: "2.0", method, params: params || {} };
+  if (!isNotif) body.id = Date.now();
+  const r = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+  const sid = r.headers.get("mcp-session-id") || sessionId;
+  const text = await r.text();
+  if (isNotif) return { sessionId: sid };
+  const json = parseMcpBody(text);
+  if (!r.ok && !json) throw new Error(`MCP ${r.status}: ${text.slice(0, 200)}`);
+  if (json && json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+  return { result: json && json.result, sessionId: sid };
+}
+// faz o handshake e devolve o sessionId (alguns servidores exigem; outros aceitam stateless)
+async function mcpHandshake(url, token) {
+  let sid;
+  try {
+    const init = await mcpRpc(url, token, "initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "painel-midia-paga", version: "1.0.0" } });
+    sid = init.sessionId;
+    try { await mcpRpc(url, token, "notifications/initialized", {}, sid, true); } catch {}
+  } catch {}
+  return sid;
+}
+// chama uma tool do MCP e devolve o texto do resultado (content[].text)
+async function mcpCallTool(s, name, args, sid) {
+  const res = await mcpRpc(s.ekyteMcpUrl, s.ekyteMcpToken, "tools/call", { name, arguments: args || {} }, sid);
+  const content = res.result && res.result.content;
+  if (Array.isArray(content)) return content.map((c) => c.text || (c.type === "text" ? c.text : "") || "").join("\n");
+  if (res.result && typeof res.result.text === "string") return res.result.text;
+  return JSON.stringify(res.result || {});
+}
+// acha o selected_api do app eKyte na resposta de list_enabled_zapier_actions
+function ekyteSelectedApi(listJsonText) {
+  try { const j = JSON.parse(listJsonText); const app = (j.apps || []).find((a) => /ekyte/i.test(a.app || "")); return app ? app.selected_api : null; } catch { return null; }
+}
+ipcMain.handle("ekyte:mcpTest", async () => {
+  const s = readStore().settings;
+  if (!s.ekyteMcpUrl) throw new Error("Cole a URL do Zapier MCP primeiro.");
+  const sid = await mcpHandshake(s.ekyteMcpUrl, s.ekyteMcpToken);
+  const apps = await mcpCallTool(s, "list_enabled_zapier_actions", {}, sid);
+  const selApi = ekyteSelectedApi(apps);
+  if (!selApi) return { enabled: String(apps).slice(0, 6000) };
+  // drill-down: detalhes da(s) ação(ões) do eKyte (action key + params da Create Task)
+  const actions = await mcpCallTool(s, "list_enabled_zapier_actions", { selected_api: selApi }, sid);
+  return { selected_api: selApi, enabled: String(actions).slice(0, 6000) };
+});
+
+// casa cliente → workspace por palavras significativas (ignora genéricas tipo "grupo", "ltda")
+const EKYTE_STOP = new Set(["grupo", "de", "do", "da", "e", "ltda", "me", "sa", "eireli", "sociedade", "individual", "advocacia", "consultoria", "unico", "br", "the"]);
+const ekyteWords = (str) => String(str || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !EKYTE_STOP.has(w));
+function ekyteMatchWorkspace(clientName, wsArr) {
+  const cw = ekyteWords(clientName); let best = null, bestScore = 0;
+  for (const w of wsArr) {
+    const name = String(w.name || w.title || "");
+    if (name.toLowerCase() === String(clientName).toLowerCase()) return w;
+    const ww = new Set(ekyteWords(name));
+    let score = 0; cw.forEach((x) => { if (ww.has(x)) score += 3; else if ([...ww].some((y) => y.includes(x) || x.includes(y))) score += 1; });
+    if (score > bestScore) { bestScore = score; best = w; }
+  }
+  return bestScore > 0 ? best : null;
+}
+// cria as tarefas da semana no Ekyte: 1 pro executor (antes da call) + 1 pra P.O (recebe)
+ipcMain.handle("ekyte:createTasks", async (_e, { clientName, workspaceId, items, weekLabel, dueExecutor, duePo, taskTypeId }) => {
+  const s = readStore().settings;
+  const useMcp = !!s.ekyteMcpUrl;
+  const useWebhook = !useMcp && !!s.ekyteWebhookUrl;
+  if (!useMcp && !useWebhook && (!s.ekyteKey || !s.ekyteCompanyId)) throw new Error("Configure o Zapier MCP (ou webhook / API Key) do Ekyte.");
+  const typeId = taskTypeId || s.ekyteTaskTypeId;
+  if (!typeId) throw new Error("Escolha o tipo de tarefa do Ekyte.");
+  if (!s.ekyteAnalystEmail) throw new Error("Informe seu email do Ekyte em Configurações.");
+  let wsId = workspaceId, wsName = clientName;
+  if (!wsId && s.ekyteKey && s.ekyteCompanyId) { // sem id fixado → casa por nome (se a API estiver configurada)
+    try {
+      const wsRaw = await ekyteApi(s, "v1.0/workspaces?page=1");
+      const wsArr = Array.isArray(wsRaw) ? wsRaw : (wsRaw.data || wsRaw.items || wsRaw.results || []);
+      const ws = ekyteMatchWorkspace(clientName, wsArr);
+      if (ws) { wsId = ws.id; wsName = ws.name || ws.title; }
+    } catch {}
+  }
+  const checklist = (items || []).map((it) => "• " + (it.text || it)).join("\n") || "(sem itens)";
+  const token = String(s.ekyteKey || "").replace(/^Bearer\s+/i, "").trim();
+  // eKyte no MCP: selected_api/action fixos (evita uma chamada de list = economiza tasks do Zapier)
+  let mcpSid; const mcpApi = "EKyteCLIAPI", mcpAction = "create_task";
+  if (useMcp) mcpSid = await mcpHandshake(s.ekyteMcpUrl, s.ekyteMcpToken);
+  // envia a tarefa: via Zapier MCP (execute_zapier_write_action) · ou webhook · ou API direta (só leitura → falha)
+  const sendTask = async (etapa, body) => {
+    if (useMcp) {
+      const instr = "Crie a tarefa no eKyte IMEDIATAMENTE com os parâmetros fornecidos. Não há projeto associado. NÃO faça perguntas de follow-up, apenas execute a criação agora.";
+      const out = await mcpCallTool(s, "execute_zapier_write_action", { selected_api: mcpApi, action: mcpAction, instructions: instr, params: body, output: "id e título da tarefa criada" }, mcpSid);
+      if (/"results"|"execution"|"actionDisplayName"/i.test(out)) return out; // criou
+      if (/"followUpQuestion"/i.test(out)) throw new Error("o Ekyte pediu confirmação — tente de novo");
+      if (/"isError"\s*:\s*true|"error"/i.test(out)) throw new Error(String(out).slice(0, 180));
+      return out;
+    }
+    if (useWebhook) return httpJson(s.ekyteWebhookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ etapa, cliente: clientName, semana: weekLabel, ...body }) });
+    return httpJson(`${EKYTE}/v1.2/tasks?apiKey=${encodeURIComponent(token)}&companyId=${encodeURIComponent(s.ekyteCompanyId)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  };
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const fallbackDue = new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10);
+  // UMA tarefa do tipo "Otimização de campanha" (que já tem as 2 etapas: Execução=analista → Aprovação=P.O).
+  // phaseStartDate = véspera da call (início do analista) · currentDueDate = dia da call (conclusão final).
+  const start = dueExecutor || todayIso;
+  const due = duePo || dueExecutor || fallbackDue;
+  const desc = `Otimizações da semana de ${clientName}:\n\n${checklist}\n\n— Etapa 1 (Execução): ${s.ekyteAnalystEmail}${s.ekytePoEmail ? `\n— Etapa 2 (Aprovação/revisão): ${s.ekytePoEmail}` : ""}`;
+  const body = { ctcTaskTypeId: Number(typeId), workspaceId: Number(wsId), planTask: 1, quantity: 1, estimatedTime: 60, priorityGroup: 30, phaseStartDate: start, currentDueDate: due, userEmail: s.ekyteAnalystEmail, title: `Otimizações — ${clientName} · ${weekLabel}`, description: desc };
+  const log = [];
+  try {
+    await sendTask("tarefa", body);
+    log.push({ ok: true, txt: `✅ Tarefa criada (resp.: ${s.ekyteAnalystEmail}) · início ${start} · concluir até ${due}` });
+  } catch (e) { log.push({ ok: false, txt: "❌ " + e.message }); }
+  return { workspace: wsName, via: useMcp ? "Zapier MCP" : useWebhook ? "webhook" : "API", log };
 });
 
 // lê o orçamento mensal por plataforma da coluna "Investimento Mensal" do board do cliente

@@ -113,6 +113,12 @@ $$(".nav .tab").forEach((b) => b.addEventListener("click", () => {
   if (b.dataset.view === "gtm") initGtmSession();
 }));
 
+// links externos (ex.: "onde pegar a chave") abrem no navegador, não dentro do app
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a.ext");
+  if (a && a.href) { e.preventDefault(); window.api.openExternal(a.href); }
+});
+
 /* ---------------- init ---------------- */
 (async function init() {
   state.settings = await window.api.getSettings();
@@ -186,6 +192,10 @@ function fillConfig() {
   $("#cfgGoogleSheets").value = s.googleSheetsKey || "";
   $("#cfgPageSpeed").value = s.pageSpeedKey || "";
   $("#cfgUpdateUrl").value = s.updateBaseUrl || "";
+  if ($("#cfgEkyteKey")) {
+    $("#cfgEkyteKey").value = s.ekyteKey || ""; $("#cfgEkyteAnalyst").value = s.ekyteAnalystEmail || ""; $("#cfgEkytePo").value = s.ekytePoEmail || ""; $("#cfgEkyteCompany").value = s.ekyteCompanyId || ""; $("#cfgEkyteWebhook").value = s.ekyteWebhookUrl || ""; $("#cfgEkyteMcpUrl").value = s.ekyteMcpUrl || ""; $("#cfgEkyteMcpToken").value = s.ekyteMcpToken || "";
+    if (s.ekyteTaskTypeId) $("#cfgEkyteTaskType").innerHTML = `<option value="${s.ekyteTaskTypeId}" selected>tipo #${s.ekyteTaskTypeId} (clique "carregar tipos" p/ ver o nome)</option>`;
+  }
   $("#cfgMetaToken").value = s.metaToken || "";
   $("#cfgGadsDev").value = s.googleAdsDevToken || "";
   $("#cfgGadsCid").value = s.googleAdsClientId || "";
@@ -220,6 +230,58 @@ $("#saveCfgBtn").addEventListener("click", async () => {
   });
   updateNavHint();
   toast("Chaves salvas com segurança no seu PC.");
+});
+
+/* ---------------- Ekyte ---------------- */
+function populateEkyteTypes(list) {
+  const sel = $("#cfgEkyteTaskType"); if (!sel || !Array.isArray(list)) return;
+  const cur = (state.settings && state.settings.ekyteTaskTypeId) || sel.value || "";
+  sel.innerHTML = '<option value="">— selecione o tipo —</option>' + list.map((t) => `<option value="${t.id}">${t.nome || t.id} · #${t.id}</option>`).join("");
+  if (cur) sel.value = String(cur);
+}
+$("#saveEkyteBtn").addEventListener("click", async () => {
+  state.settings = await window.api.setSettings({
+    ekyteKey: $("#cfgEkyteKey").value.trim(),
+    ekyteAnalystEmail: $("#cfgEkyteAnalyst").value.trim(),
+    ekytePoEmail: $("#cfgEkytePo").value.trim(),
+    ekyteCompanyId: $("#cfgEkyteCompany").value.trim(),
+    ekyteTaskTypeId: $("#cfgEkyteTaskType").value.trim(),
+    ekyteWebhookUrl: $("#cfgEkyteWebhook").value.trim(),
+    ekyteMcpUrl: $("#cfgEkyteMcpUrl").value.trim(),
+    ekyteMcpToken: $("#cfgEkyteMcpToken").value.trim(),
+  });
+  $("#ekyteMsg").textContent = "✅ salvo";
+  toast("Ekyte salvo.");
+});
+$("#ekyteMcpTestBtn").addEventListener("click", async () => {
+  const msg = $("#ekyteMcpMsg"); const box = $("#ekyteMcpBox");
+  msg.textContent = "testando…"; box.innerHTML = "";
+  try {
+    state.settings = await window.api.setSettings({ ekyteMcpUrl: $("#cfgEkyteMcpUrl").value.trim(), ekyteMcpToken: $("#cfgEkyteMcpToken").value.trim() });
+    const r = await window.api.ekyteMcpTest();
+    msg.textContent = "✅ conectou — veja as ações habilitadas abaixo";
+    box.innerHTML = `<pre style="white-space:pre-wrap;font-size:11px;color:var(--muted);max-height:300px;overflow:auto;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px">${(r.enabled || "(vazio)").replace(/</g, "&lt;")}</pre>`;
+  } catch (e) { msg.textContent = "❌ " + e.message; }
+});
+$("#ekyteLoadTypesBtn").addEventListener("click", async () => {
+  const btn = $("#ekyteLoadTypesBtn"); btn.disabled = true; btn.textContent = "…";
+  try { await window.api.setSettings({ ekyteKey: $("#cfgEkyteKey").value.trim(), ekyteCompanyId: $("#cfgEkyteCompany").value.trim() }); state.settings = await window.api.getSettings(); populateEkyteTypes(await window.api.ekyteTaskTypes()); toast("Tipos de tarefa carregados — escolha o de otimização."); }
+  catch (e) { toast("Ekyte: " + e.message, true); }
+  btn.disabled = false; btn.textContent = "↻ carregar tipos";
+});
+$("#ekyteTestBtn").addEventListener("click", async () => {
+  const msg = $("#ekyteTestMsg"); const box = $("#ekyteInfoBox");
+  msg.textContent = "testando…"; box.innerHTML = "";
+  try {
+    // garante que a chave digitada está salva antes de testar
+    state.settings = await window.api.setSettings({ ekyteKey: $("#cfgEkyteKey").value.trim(), ekyteCompanyId: $("#cfgEkyteCompany").value.trim() });
+    const r = await window.api.ekyteTest();
+    const ok = Array.isArray(r.WORKSPACES);
+    if (Array.isArray(r.TIPOS_DE_TAREFA)) populateEkyteTypes(r.TIPOS_DE_TAREFA);
+    msg.textContent = ok ? `✅ conexão ok — ${r.WORKSPACES.length} workspaces, ${(r.TIPOS_DE_TAREFA || []).length} tipos de tarefa` : "⚠️ respondeu, confira abaixo";
+    const fmt = (v) => `<pre style="white-space:pre-wrap;font-size:11px;color:var(--muted);max-height:220px;overflow:auto;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px">${JSON.stringify(v, null, 2).slice(0, 1500)}</pre>`;
+    box.innerHTML = Object.entries(r).map(([k, v]) => `<div style="font-size:12px;margin-top:6px"><b>${k}</b> ${fmt(v)}</div>`).join("");
+  } catch (e) { msg.textContent = "❌ " + e.message; }
 });
 
 /* testar qual motor de IA está ativo (Claude do plano / Gemini) */
@@ -793,6 +855,7 @@ async function analisar(opts = {}) {
     try { const c = currentClient(); if (c && c.leads && c.leads.sheetUrl) state.leads = await window.api.leadsSummary({ projectId: localPid, start: state.week.start, end: state.week.end }); } catch {}
     renderPainel();
     $("#enviarBtn").classList.remove("hidden");
+    $("#enviarEkyteBtn").classList.toggle("hidden", !(state.settings.ekyteTaskTypeId && (state.settings.ekyteMcpUrl || state.settings.ekyteWebhookUrl || (state.settings.ekyteKey && state.settings.ekyteCompanyId))));
     // PageSpeed (lento ~15s) roda em segundo plano e re-renderiza quando volta
     const cli = currentClient();
     if (cli && cli.adAccounts && cli.adAccounts.site && state.settings.pageSpeedKey) {
@@ -1188,6 +1251,54 @@ async function enviar(btnEl) {
     if (trello.optCardUrl) setTimeout(() => window.api.openExternal(trello.optCardUrl), 400);
   } catch (err) { btn.disabled = false; btn.textContent = "📤 Enviar pro Trello"; toast("Trello: " + err.message, true); }
 }
+
+/* ---------------- enviar pro Ekyte (tarefas: executor antes da call + P.O recebe) ---------------- */
+const nextWeekdayDate = (weekday) => { const d = new Date(); d.setHours(0, 0, 0, 0); for (let i = 0; i <= 14; i++) { const x = new Date(d); x.setDate(d.getDate() + i); if (x.getDay() === weekday) return x; } return d; };
+const prevBizDate = (date) => { const d = new Date(date); do { d.setDate(d.getDate() - 1); } while (d.getDay() === 0 || d.getDay() === 6); return d; };
+// mostra um seletor de tipo de tarefa (padrão = o configurado) e devolve o id escolhido (ou null se cancelar)
+async function pickEkyteType() {
+  if (!state.ekyteTypes) { try { state.ekyteTypes = await window.api.ekyteTaskTypes(); } catch { state.ekyteTypes = []; } }
+  const types = state.ekyteTypes || [];
+  if (!types.length) return state.settings.ekyteTaskTypeId || null;
+  const def = state.settings.ekyteTaskTypeId || "";
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999";
+    ov.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;width:440px;max-width:92%">
+      <div style="font-weight:700;font-size:15px;margin-bottom:4px">📋 Enviar pro Ekyte</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Tipo de tarefa pra criar (padrão = otimização):</div>
+      <select id="pickType" style="width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;color:var(--txt);outline:none">${types.map((t) => `<option value="${t.id}" ${String(t.id) === String(def) ? "selected" : ""}>${t.nome || t.id} · #${t.id}</option>`).join("")}</select>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="chip-btn" id="pickCancel">Cancelar</button>
+        <button class="btn btn-primary" id="pickOk" style="padding:8px 16px">Criar tarefas</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener("click", (e) => { if (e.target === ov) { ov.remove(); resolve(null); } });
+    $("#pickCancel", ov).addEventListener("click", () => { ov.remove(); resolve(null); });
+    $("#pickOk", ov).addEventListener("click", () => { const v = $("#pickType", ov).value; ov.remove(); resolve(v); });
+  });
+}
+$("#enviarEkyteBtn").addEventListener("click", async () => {
+  const c = currentClient();
+  if (!c) { toast("Selecione um cliente.", true); return; }
+  const items = currentItems();
+  if (!items.length) { toast("Sem otimizações pra mandar ao Ekyte.", true); return; }
+  const taskTypeId = await pickEkyteType();
+  if (!taskTypeId) return; // cancelou
+  const btn = $("#enviarEkyteBtn"); btn.disabled = true; btn.textContent = "Enviando…";
+  // prazos a partir da call do cliente (da aba Minha Semana): executor = véspera útil · P.O = dia da call
+  let dueExecutor, duePo;
+  const wd = c.call && c.call.weekday;
+  if (wd) { const cd = nextWeekdayDate(wd); duePo = iso(cd); dueExecutor = iso(prevBizDate(cd)); }
+  try {
+    const r = await window.api.ekyteCreateTasks({ clientName: c.name, workspaceId: c.ekyteWorkspaceId || null, items, weekLabel: state.week.label, dueExecutor, duePo, taskTypeId });
+    const fails = (r.log || []).filter((l) => !l.ok).length;
+    toast(fails ? `Ekyte: ${fails} tarefa(s) falharam — veja o detalhe.` : `✅ Tarefas criadas no Ekyte (workspace "${r.workspace}").`, !!fails);
+    try { await window.api.logAction({ projectId: c.projectId, clientName: c.name, type: "ekyte", summary: `${(r.log || []).filter((l) => l.ok).length} tarefa(s) criada(s) no Ekyte · ${state.week.label}`, detail: (r.log || []).map((l) => l.txt).join(" | ") }); } catch {}
+    if (fails) alert((r.log || []).map((l) => l.txt).join("\n"));
+  } catch (e) { toast("Ekyte: " + e.message, true); }
+  btn.disabled = false; btn.textContent = "📋 Enviar pro Ekyte";
+});
 
 /* ============================================================
    FUNIL STUDIO — IA pra montar estratégia por descrição
@@ -2090,7 +2201,7 @@ async function renderHistory() {
   list.sort((a, b) => (a.start < b.start ? 1 : -1));
   const actHtml = actions.length ? `<div class="section-title">🛠️ Ações de otimização (na conta de anúncio)</div>`
     + actions.map((a, ai) => `<div class="hist-item" style="cursor:default">
-        <div style="flex:1"><div class="hist-week">${a.type === "negativacao" ? "🚫" : a.type === "keyword" ? "➕" : a.type === "toggle" ? "⚙️" : a.type === "creative" ? "🎨" : "•"} ${a.summary}</div>
+        <div style="flex:1"><div class="hist-week">${a.type === "negativacao" ? "🚫" : a.type === "keyword" ? "➕" : a.type === "toggle" ? "⚙️" : a.type === "creative" ? "🎨" : a.type === "ekyte" ? "📋" : "•"} ${a.summary}</div>
           <div class="hist-meta">${new Date(a.at).toLocaleString("pt-BR")}${a.detail ? " · " + (a.detail.length > 120 ? a.detail.slice(0, 120) + "…" : a.detail) : ""}</div></div>
         ${a.type === "negativacao" ? `<button class="chip-btn act-trello" data-ai="${ai}">📋 Enviar pro Trello</button>` : ""}
       </div>`).join("") : "";

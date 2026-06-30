@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld("api", {
   trelloDoneCard: (args) => ipcRenderer.invoke("trello:doneCard", args),
   trelloSendCreatives: (args) => ipcRenderer.invoke("trello:sendCreatives", args),
   trelloBudget: (args) => ipcRenderer.invoke("trello:budget", args),
+  ekyteTest: () => ipcRenderer.invoke("ekyte:test"),
+  ekyteTaskTypes: () => ipcRenderer.invoke("ekyte:taskTypes"),
+  ekyteMcpTest: () => ipcRenderer.invoke("ekyte:mcpTest"),
+  ekyteCreateTasks: (args) => ipcRenderer.invoke("ekyte:createTasks", args),
 
   // Gemini
   geminiAnalyze: (args) => ipcRenderer.invoke("gemini:analyze", args),

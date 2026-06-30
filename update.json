@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "notes": "Versão inicial",
+  "version": "1.1.0",
+  "notes": "Minha Semana (rotina por call, pacing, feito/pendências), análise por plataforma, criativos e orçamento via Trello, kickoff→persona, palavras-chave com negativas, salvar no Obsidian, atalhos Google/Meta e tarefas no Ekyte",
   "files": [
     "src/app.js",
     "src/engine.js",
