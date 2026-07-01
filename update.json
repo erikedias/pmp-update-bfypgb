@@ -1,6 +1,6 @@
 {
-  "version": "1.3.0",
-  "notes": "Google Ads (central): nova seção 'Volume das palavras-chave que eu já tenho' — cole a lista pronta e veja o volume real de cada termo (sem gerar ideias novas), com cópia em qualquer correspondência (frase/exata/ampla). Inclui: colar print (⌘V) no GTM, GTM lê a página de verdade, palavras-chave pro Trello, termos por datas específicas",
+  "version": "1.3.1",
+  "notes": "Minha Semana: botão 📋 Trello em cada card (junto do Google/Meta) abre o board do cliente com 1 clique. Inclui: volume de palavras-chave prontas, colar print (⌘V) no GTM, GTM lê a página de verdade, palavras-chave pro Trello, termos por datas específicas",
   "files": [
     "src/app.js",
     "src/engine.js",

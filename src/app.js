@@ -3200,7 +3200,8 @@ function renderSemana() {
       pos: { txt: "📋 Ver combinado (Trello)", act: "trello", sub: `Call foi ${WD_NAMES[callWeekday(c)]}` },
     }[kind];
     const platBtns = (ads.google ? `<button class="chip-btn sem-plat" data-plat="google" data-pid="${c.projectId}" title="Abrir a conta no Google Ads">🟢 Google</button>` : "")
-      + (ads.meta ? `<button class="chip-btn sem-plat" data-plat="meta" data-pid="${c.projectId}" title="Abrir a conta no Gerenciador de Anúncios">📘 Meta</button>` : "");
+      + (ads.meta ? `<button class="chip-btn sem-plat" data-plat="meta" data-pid="${c.projectId}" title="Abrir a conta no Gerenciador de Anúncios">📘 Meta</button>` : "")
+      + (c.trelloBoardId ? `<button class="chip-btn sem-trello" data-pid="${c.projectId}" title="Abrir o board do Trello">📋 Trello</button>` : "");
     return `<div style="background:var(--panel-2);border:1px solid ${done ? "var(--accent)" : "var(--line)"};border-radius:10px;padding:11px 13px;margin-bottom:8px;${done ? "opacity:.62" : ""}">
       <div style="font-weight:600;font-size:14px;${done ? "text-decoration:line-through" : ""}">${c.name}</div>
       <div style="font-size:12px;color:var(--muted);margin:2px 0 6px">${acts.sub}</div>
@@ -3237,6 +3238,10 @@ function renderSemana() {
       if (b.dataset.act === "trello") goClientTrello(pid); else if (b.dataset.act === "hist") goClientHistory(pid); else goClientPanel(pid);
     }));
     $$(".sem-plat", body).forEach((b) => b.addEventListener("click", () => openPlatform(b.dataset.plat, Number(b.dataset.pid))));
+    $$(".sem-trello", body).forEach((b) => b.addEventListener("click", () => {
+      const c = state.clients.find((x) => x.projectId === Number(b.dataset.pid));
+      if (c && c.trelloBoardId) window.api.openExternal(`https://trello.com/b/${c.trelloBoardId}`);
+    }));
     $$(".sem-hist", body).forEach((b) => b.addEventListener("click", () => goClientHistory(Number(b.dataset.pid))));
     $$(".sem-done", body).forEach((b) => b.addEventListener("click", async () => {
       const pid = Number(b.dataset.pid);
