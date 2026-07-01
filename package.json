@@ -1,7 +1,7 @@
 {
   "name": "painel-midia-paga",
   "productName": "Painel Midia Paga",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Diagnostico semanal de gargalos de midia paga — Reportei + Trello + Gemini + Meta/Google Ads + GA4/GTM",
   "main": "electron/main.cjs",
   "author": "@diasesteci",

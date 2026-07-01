@@ -1684,6 +1684,37 @@ ipcMain.handle("googleads:keywordIdeas", async (_e, { customerId, keywords, url 
   return out.slice(0, 300);
 });
 
+// VOLUME EXATO das palavras-chave que a analista JÁ TEM (sem expandir em novas ideias)
+ipcMain.handle("googleads:keywordVolume", async (_e, { customerId, keywords }) => {
+  const s = readStore().settings;
+  const cid = String(customerId || s.googleAdsLoginCustomerId || "").replace(/-/g, "");
+  if (!cid) throw new Error("Vincule a conta Google do cliente (ou configure a MCC).");
+  const headers = await gadsHeaders();
+  const kws = (keywords || []).map((k) => String(k).trim()).filter(Boolean).slice(0, 500);
+  if (!kws.length) throw new Error("Cole ao menos uma palavra-chave.");
+  const body = {
+    keywords: kws,
+    geoTargetConstants: ["geoTargetConstants/2076"], // Brasil
+    language: "languageConstants/1014",               // Português
+    keywordPlanNetwork: "GOOGLE_SEARCH",
+  };
+  const r = await googleAdsApi(`customers/${cid}:generateKeywordHistoricalMetrics`, { method: "POST", headers, body: JSON.stringify(body) });
+  const compPt = { LOW: "Baixa", MEDIUM: "Média", HIGH: "Alta" };
+  const found = new Map();
+  (r.results || []).forEach((x) => {
+    const m = x.keywordMetrics || {};
+    found.set(String(x.text || "").toLowerCase(), {
+      termo: x.text,
+      volume: Number(m.avgMonthlySearches || 0),
+      concorrencia: compPt[m.competition] || "—",
+      lanceMin: m.lowTopOfPageBidMicros ? Number(m.lowTopOfPageBidMicros) / 1e6 : null,
+      lanceMax: m.highTopOfPageBidMicros ? Number(m.highTopOfPageBidMicros) / 1e6 : null,
+    });
+  });
+  // mantém a ordem/lista original — se o Google não retornar métrica pra alguma, mostra volume 0
+  return kws.map((k) => found.get(k.toLowerCase()) || { termo: k, volume: 0, concorrencia: "—", lanceMin: null, lanceMax: null });
+});
+
 ipcMain.handle("googleads:addKeywords", async (_e, { customerId, items }) => {
   const cid = String(customerId || "").replace(/-/g, "");
   if (!cid) throw new Error("Cliente sem conta Google vinculada.");

@@ -1,6 +1,6 @@
 {
-  "version": "1.2.1",
-  "notes": "Colar print direto (⌘V / Ctrl+V) no campo de imagem do GTM — sem precisar salvar o arquivo (também aceita arrastar-e-soltar); base reutilizável pra outras abas. Inclui: GTM lê a página de verdade, palavras-chave pro Trello e termos por datas específicas",
+  "version": "1.3.0",
+  "notes": "Google Ads (central): nova seção 'Volume das palavras-chave que eu já tenho' — cole a lista pronta e veja o volume real de cada termo (sem gerar ideias novas), com cópia em qualquer correspondência (frase/exata/ampla). Inclui: colar print (⌘V) no GTM, GTM lê a página de verdade, palavras-chave pro Trello, termos por datas específicas",
   "files": [
     "src/app.js",
     "src/engine.js",

@@ -1735,6 +1735,54 @@ $$(".gads-run").forEach((b) => b.addEventListener("click", async () => {
   } catch (e) { out.innerHTML = `<p class="md-err">❌ ${e.message}</p>`; }
   b.disabled = false; b.textContent = orig;
 }));
+/* --- volume das palavras-chave que a analista já tem (sem gerar ideias novas) --- */
+function kwVolFmt(termo, matchSel) {
+  const m = ((matchSel || {}).value) || "phrase";
+  if (m === "exact") return `[${termo}]`;
+  if (m === "broad") return termo;
+  return `"${termo}"`;
+}
+$("#kwVolBtn").addEventListener("click", async () => {
+  const c = kwClient(); const body = $("#kwVolBody");
+  const gid = c && c.adAccounts && c.adAccounts.google;
+  if (!gid) { toast("Vincule a conta Google deste cliente em ⚙️ Configurações → \"contas\".", true); return; }
+  const list = $("#kwVolInput").value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+  if (!list.length) { toast("Cole ao menos uma palavra-chave.", true); return; }
+  const btn = $("#kwVolBtn"); btn.disabled = true; btn.textContent = "Buscando volume…";
+  body.innerHTML = '<div class="state">⏳ Consultando o Google Ads…</div>';
+  try {
+    const res = await window.api.googleAdsKeywordVolume({ customerId: gid, keywords: list });
+    state.kwVolResults = res;
+    renderKwVol(res);
+  } catch (e) { body.innerHTML = `<div class="state error">❌ ${e.message}</div>`; }
+  btn.disabled = false; btn.textContent = "Ver volume";
+});
+function renderKwVol(list) {
+  const brl = (n) => (n == null ? "—" : "R$ " + n.toFixed(2));
+  const rows = list.map((k, i) => `<tr><td style="text-align:center"><input type="checkbox" class="kwvol-ck" data-i="${i}" checked></td><td style="text-align:left">${k.termo}</td><td>${E.fmt.n(k.volume)}</td><td>${k.concorrencia}</td><td>${brl(k.lanceMin)} – ${brl(k.lanceMax)}</td></tr>`).join("");
+  $("#kwVolBody").innerHTML = `
+    <div class="table-wrap"><table><thead><tr><th style="width:40px">✓</th><th style="text-align:left">Palavra-chave</th><th>Buscas/mês</th><th>Concorrência</th><th>Lance topo (R$)</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+      <label style="font-size:12px;color:var(--muted)">Correspondência</label>
+      <select id="kwVolMatch" style="background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;color:var(--txt);outline:none">
+        <option value="phrase">"Frase"</option>
+        <option value="exact">[Exata]</option>
+        <option value="broad">Ampla</option>
+      </select>
+      <button class="btn btn-ghost" id="kwVolCopyBtn">📋 Copiar</button>
+    </div>`;
+  $("#kwVolCopyBtn").addEventListener("click", () => {
+    const results = state.kwVolResults || [];
+    const matchSel = $("#kwVolMatch");
+    let sel = [...$$(".kwvol-ck")].filter((c) => c.checked).map((c) => results[+c.dataset.i].termo);
+    if (!sel.length) sel = results.map((k) => k.termo);
+    const fmt = sel.map((t) => kwVolFmt(t, matchSel));
+    navigator.clipboard.writeText(fmt.join("\n"));
+    const mLabel = { phrase: "frase", exact: "exata", broad: "ampla" }[(matchSel || {}).value || "phrase"];
+    toast(`${fmt.length} palavra(s) copiada(s) em correspondência ${mLabel}.`);
+  });
+}
+
 $("#kwBtn").addEventListener("click", async () => {
   const c = kwClient(); const body = $("#kwBody");
   const gid = c && c.adAccounts && c.adAccounts.google;
