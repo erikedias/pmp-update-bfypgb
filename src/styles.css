@@ -312,3 +312,7 @@ tr.term-bad{background:rgba(255,107,107,.06)}
 .ask-bar input{flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--txt);font-size:14px;outline:none}
 .ask-bar input:focus{border-color:var(--accent)}
 .ask-suggest{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+
+/* zona de colar imagem (⌘V / Ctrl+V) — reutilizável em qualquer aba */
+.img-paste{border:1px dashed var(--line);border-radius:12px;padding:12px;transition:border-color .15s,background .15s;outline:none}
+.img-paste:focus,.img-paste.paste-ready{border-color:var(--accent);background:rgba(25,227,162,.05)}

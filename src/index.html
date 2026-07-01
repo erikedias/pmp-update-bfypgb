@@ -597,9 +597,15 @@
         </div>
         <div class="formrow">
           <label>Screenshot da página (opcional — ajuda a IA identificar botões)</label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button class="chip-btn" id="gtmPickImg">📂 Escolher imagem</button>
-            <span id="gtmImgName" class="sub"></span>
+          <div class="img-paste" id="gtmImgZone" tabindex="0" title="Cole aqui com ⌘V / Ctrl+V">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button class="chip-btn" id="gtmPickImg">📂 Escolher imagem</button>
+              <button class="chip-btn" id="gtmPasteImg">📋 Colar print (⌘V)</button>
+              <span id="gtmImgName" class="sub"></span>
+              <button class="chip-btn hidden" id="gtmImgClear">✕ remover</button>
+            </div>
+            <img id="gtmImgPreview" class="hidden" style="max-height:120px;margin-top:8px;border-radius:8px;border:1px solid var(--line)">
+            <div class="sub" style="margin-top:6px;opacity:.7">Dica: dê um print (⌘⇧4 / Win+Shift+S) e cole aqui direto — não precisa salvar o arquivo.</div>
           </div>
         </div>
         <button class="btn btn-primary" id="gtmSmartBtn">✨ Analisar e sugerir eventos</button>

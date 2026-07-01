@@ -1,6 +1,6 @@
 {
-  "version": "1.2.0",
-  "notes": "GTM Configuração rápida agora lê a página de verdade e sugere eventos (botões/CTAs/formulários reais); enviar palavras-chave adicionadas pro Trello (não só negativadas); termos de busca com período por datas específicas",
+  "version": "1.2.1",
+  "notes": "Colar print direto (⌘V / Ctrl+V) no campo de imagem do GTM — sem precisar salvar o arquivo (também aceita arrastar-e-soltar); base reutilizável pra outras abas. Inclui: GTM lê a página de verdade, palavras-chave pro Trello e termos por datas específicas",
   "files": [
     "src/app.js",
     "src/engine.js",

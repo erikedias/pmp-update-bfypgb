@@ -2962,17 +2962,67 @@ async function initGtmSession() {
 
 $("#gtmContLoad").addEventListener("click", async () => { gtmContainers = []; await initGtmSession(); });
 
-$("#gtmPickImg").addEventListener("click", async () => {
-  const path = await (async () => {
-    return new Promise((res) => {
-      const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
-      inp.addEventListener("change", () => res(inp.files[0] ? inp.files[0].path : null));
-      inp.click();
+/* ------------------------------------------------------------
+   Utilitário reutilizável: escolher / COLAR (⌘V) / arrastar imagem
+   numa "zona", devolvendo o dataURL. Use em qualquer aba do app.
+   ------------------------------------------------------------ */
+function fileToDataUrl(file) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result || "")); r.onerror = rej; r.readAsDataURL(file); });
+}
+function setupImageInput({ zone, nameEl, previewEl, clearBtn, pickBtn, pasteBtn, onImage }) {
+  const setImg = async (fileOrUrl, name) => {
+    const dataUrl = typeof fileOrUrl === "string" ? fileOrUrl : await fileToDataUrl(fileOrUrl);
+    if (previewEl) { previewEl.src = dataUrl; previewEl.classList.remove("hidden"); }
+    if (nameEl) nameEl.textContent = name || "print colado";
+    if (clearBtn) clearBtn.classList.remove("hidden");
+    onImage(dataUrl, name || "");
+  };
+  const clear = () => {
+    if (previewEl) { previewEl.src = ""; previewEl.classList.add("hidden"); }
+    if (nameEl) nameEl.textContent = "";
+    if (clearBtn) clearBtn.classList.add("hidden");
+    onImage(null, "");
+  };
+  if (pickBtn) pickBtn.addEventListener("click", () => {
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
+    inp.addEventListener("change", async () => { const f = inp.files[0]; if (f) await setImg(f, f.name); });
+    inp.click();
+  });
+  // botão "Colar print" — lê a imagem direto da área de transferência
+  if (pasteBtn) pasteBtn.addEventListener("click", async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const it of items) {
+        const type = it.types.find((t) => t.startsWith("image/"));
+        if (type) { await setImg(await it.getType(type), "print colado"); return; }
+      }
+      toast("Não achei imagem copiada. Dê um print antes (⌘⇧4 no Mac / Win+Shift+S).", true);
+    } catch { toast("Clique dentro da caixa e use ⌘V (Ctrl+V) pra colar o print.", true); }
+  });
+  if (zone) {
+    // colar com ⌘V / Ctrl+V dentro da zona
+    zone.addEventListener("paste", async (e) => {
+      const items = (e.clipboardData || {}).items || [];
+      for (const it of items) {
+        if (it.type && it.type.startsWith("image/")) { e.preventDefault(); const f = it.getAsFile(); if (f) await setImg(f, "print colado"); return; }
+      }
     });
-  })();
-  if (!path) return;
-  gtmImgData = await window.api.readImage(path);
-  $("#gtmImgName").textContent = path.split("/").pop();
+    // arrastar-e-soltar
+    zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("paste-ready"); });
+    zone.addEventListener("dragleave", () => zone.classList.remove("paste-ready"));
+    zone.addEventListener("drop", async (e) => {
+      e.preventDefault(); zone.classList.remove("paste-ready");
+      const f = (e.dataTransfer.files || [])[0]; if (f && f.type.startsWith("image/")) await setImg(f, f.name);
+    });
+  }
+  if (clearBtn) clearBtn.addEventListener("click", clear);
+  return { clear };
+}
+
+setupImageInput({
+  zone: $("#gtmImgZone"), nameEl: $("#gtmImgName"), previewEl: $("#gtmImgPreview"),
+  clearBtn: $("#gtmImgClear"), pickBtn: $("#gtmPickImg"), pasteBtn: $("#gtmPasteImg"),
+  onImage: (dataUrl) => { gtmImgData = dataUrl; },
 });
 
 $("#gtmSmartBtn").addEventListener("click", async () => {
