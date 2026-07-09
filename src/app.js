@@ -2139,17 +2139,34 @@ async function fillReportAnalysis(sec, cName, monthLabel) {
   if (!el) return;
   try {
     const raw = sec.raw || {};
-    const pr = { platform: sec.platform, totals: raw.totals || {}, rows: [] };
-    (raw.campaigns || []).forEach((c) => pr.rows.push({ level: "campaign", name: c.name, metrics: { impressions: c.impr, reach: c.reach, clicks: c.clk, leads: c.results, spend: c.spend, ctr: c.ctr } }));
-    const txt = await window.api.geminiReportPlatform({ clientName: cName, monthLabel, pr, prevTotals: raw.prev || {}, benchmarks: null });
-    const clean = (txt || "").replace(/===\s*\w+\s*===/g, "").replace(/\n{3,}/g, "\n\n").trim();
-    el.textContent = clean || "—";
+    const pick = (arr) => (arr || []).map((a) => ({ name: a.name, ctr: a.ctr, results: a.results, cpr: a.cpr, spend: a.spend }));
+    const txt = await window.api.reportAnalyze({
+      clientName: cName, monthLabel, label: sec.label,
+      kpis: (sec.kpis || []).map((k) => ({ label: k.label, value: k.value, prev: k.prev, kind: k.kind })),
+      adsets: pick(raw.adsets), ads: pick(raw.ads),
+    });
+    el.innerHTML = renderAnalysisPoints(txt);
     el.contentEditable = "true";
   } catch (e) {
     el.innerHTML = `<span class="rr-ph">⚠️ ${e.message} — <a href="#" class="rep-retry-an" data-p="${sec.platform}">tentar de novo</a></span>`;
     const a = el.querySelector(".rep-retry-an");
     if (a) a.addEventListener("click", (ev) => { ev.preventDefault(); el.innerHTML = '<span class="rr-ph">⏳ gerando análise…</span>'; fillReportAnalysis(sec, cName, monthLabel); });
   }
+}
+
+// converte "## Título\nparágrafo" (com linhas em branco entre pontos) em <h4>+<p> — o formato ponto a ponto do relatório
+function renderAnalysisPoints(txt) {
+  const esc = (x) => String(x).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const s = String(txt || "").replace(/\r/g, "").replace(/\*\*/g, "").trim();
+  if (!s) return "<p>—</p>";
+  const parts = s.split(/\n(?=\s*##\s)/);
+  let html = "";
+  parts.forEach((p) => {
+    const m = p.match(/^\s*##\s*(.+?)\r?\n([\s\S]*)$/);
+    if (m) html += `<h4>${esc(m[1].trim())}</h4><p>${esc(m[2].trim()).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, " ")}</p>`;
+    else { const t = p.replace(/^\s*##\s*/, "").trim(); if (t) html += `<p>${esc(t).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, " ")}</p>`; }
+  });
+  return html || `<p>${esc(s)}</p>`;
 }
 
 // exportar o relatório visível em PDF nítido (A4)

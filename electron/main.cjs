@@ -742,6 +742,28 @@ ipcMain.handle("gemini:reportFinal", async (_e, { clientName, monthLabel, platfo
   return aiAnalyze(s, buildReportFinalPrompt(clientName, monthLabel, platformResults, leads, cplIdeal));
 });
 
+// análise ponto-a-ponto do relatório estilo Reportei (título + parágrafo por métrica, depois públicos, depois anúncios)
+function buildReportAnalysisPrompt(d) {
+  const fv = (kind, v) => (v == null || isNaN(v)) ? "sem dado" : kind === "brl" ? "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : kind === "pct" ? parseFloat(Number(v).toFixed(2)) + "%" : kind === "num2" ? Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Number(v).toLocaleString("pt-BR");
+  const dl = (v, p) => (p == null || p === 0 || v == null) ? "" : (() => { const x = parseFloat(((v - p) / p * 100).toFixed(1)); return ` (${x > 0 ? "+" : ""}${x}% vs período anterior)`; })();
+  const kpiLines = (d.kpis || []).map((k) => `${k.label}: ${fv(k.kind, k.value)}${dl(k.value, k.prev)}`).join("\n");
+  const listLine = (a) => `${a.name}: CTR ${a.ctr != null ? parseFloat(Number(a.ctr).toFixed(2)) + "%" : "sem dado"}, resultados ${a.results != null ? a.results : "sem dado"}, custo por resultado ${a.cpr != null ? "R$ " + Number(a.cpr).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "sem dado"}, investido R$ ${Number(a.spend || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+  const adsetLines = (d.adsets || []).map(listLine).join("\n");
+  const adLines = (d.ads || []).map(listLine).join("\n");
+  return [
+    `Você é analista de mídia paga. Escreva a análise da plataforma ${d.label} do relatório mensal do cliente "${d.clientName}" (${d.monthLabel}). Este texto vai DIRETO para o cliente — já é a análise final.`,
+    `FORMATO OBRIGATÓRIO: ponto a ponto. Cada ponto começa com "## " seguido do título (o nome da métrica ou do bloco); na LINHA SEGUINTE, um parágrafo corrido analisando só aquele ponto. Deixe uma linha em branco entre os pontos.`,
+    `Percorra a jornada NA ORDEM das métricas abaixo — um "## " para cada — comparando com o período anterior (a variação já vem nos dados) e explicando causa e efeito entre elas.`,
+    (d.adsets && d.adsets.length) ? `Depois da jornada, adicione "## Públicos" com um parágrafo destacando o público de melhor CPL e de melhor CTR, e os mais caros que devem ter a verba realocada.` : "",
+    (d.ads && d.ads.length) ? `Depois, adicione "## Anúncios" com um parágrafo destacando os anúncios de melhor resultado e os que devem ser trocados.` : "",
+    `REGRAS: já é a análise pronta — NÃO diga "vou analisar", NÃO diga "seguindo a jornada", NÃO explique seu método, NÃO repita estas instruções; comece direto no primeiro "## ". NÃO use traços, asteriscos, listas com marcador nem markdown — só "## " nos títulos e parágrafos normais. Use SOMENTE os dados abaixo; se algo for zero/ausente, comente com naturalidade sem inventar número. Tom profissional e claro, em português.`,
+    `\nMÉTRICAS (jornada, na ordem):\n${kpiLines}`,
+    adsetLines ? `\nPÚBLICOS (conjuntos de anúncio):\n${adsetLines}` : "",
+    adLines ? `\nANÚNCIOS:\n${adLines}` : "",
+  ].filter(Boolean).join("\n");
+}
+ipcMain.handle("report:analyzeSection", async (_e, d) => aiAnalyze(readStore().settings, buildReportAnalysisPrompt(d)));
+
 // prompt livre (usado pelo Funil Studio embutido pra montar estratégias por descrição)
 ipcMain.handle("gemini:raw", async (_e, { prompt }) => aiAnalyze(readStore().settings, prompt));
 

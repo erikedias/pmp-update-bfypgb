@@ -1,6 +1,6 @@
 {
-  "version": "1.3.2",
-  "notes": "Nova aba de Relatórios no estilo Reportei: KPIs com comparação vs mês anterior, funil, gráficos e tabelas por plataforma (Meta/Google pela API própria, LinkedIn via Reportei), análise automática por IA e exportação em PDF nítido (A4).",
+  "version": "1.3.3",
+  "notes": "Relatórios: ícones corretos (Meta, Google Ads, LinkedIn) e análise ponto a ponto (um título por métrica + parágrafo, percorrendo a jornada, depois públicos e anúncios) — sem repetir o modelo, sem traços e corrigido o Google que vinha 'sem dados'.",
   "files": [
     "src/app.js",
     "src/engine.js",

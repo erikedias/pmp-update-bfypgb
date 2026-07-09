@@ -12,8 +12,9 @@ contextBridge.exposeInMainWorld("api", {
   reporteiProjects: (q) => ipcRenderer.invoke("reportei:projects", q),
   reporteiWeekData: (args) => ipcRenderer.invoke("reportei:weekData", args),
 
-  // Relatório estilo Reportei (dado ao vivo + export PDF)
+  // Relatório estilo Reportei (dado ao vivo + análise + export PDF)
   reportBuild: (args) => ipcRenderer.invoke("report:build", args),
+  reportAnalyze: (args) => ipcRenderer.invoke("report:analyzeSection", args),
   reportExportPdf: (args) => ipcRenderer.invoke("report:exportPdf", args),
 
   // Trello
