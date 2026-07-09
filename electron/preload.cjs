@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("api", {
   // Relatório estilo Reportei (dado ao vivo + análise + export PDF)
   reportBuild: (args) => ipcRenderer.invoke("report:build", args),
   reportAnalyze: (args) => ipcRenderer.invoke("report:analyzeSection", args),
+  reportAnalyzeMetric: (args) => ipcRenderer.invoke("report:analyzeMetric", args),
   reportExportPdf: (args) => ipcRenderer.invoke("report:exportPdf", args),
 
   // Trello
@@ -64,6 +65,7 @@ contextBridge.exposeInMainWorld("api", {
   historyList: (projectId) => ipcRenderer.invoke("history:list", projectId),
   historyGet: (id) => ipcRenderer.invoke("history:get", id),
   historySave: (record) => ipcRenderer.invoke("history:save", record),
+  historyDelete: (id) => ipcRenderer.invoke("history:delete", id),
   logAction: (a) => ipcRenderer.invoke("action:log", a),
   listActions: (projectId) => ipcRenderer.invoke("action:list", projectId),
 

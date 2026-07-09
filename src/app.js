@@ -2202,8 +2202,8 @@ async function gerarRelatorio() {
       return;
     }
     ReportView.renderInto(body, resp.sections, { editable: true });
-    state.repDoc = { cName, monthLabel, sections: resp.sections };
-    $("#copyRelBtn").classList.remove("hidden"); $("#pdfRelBtn").classList.remove("hidden");
+    state.repDoc = { cName, monthLabel, projectId, sections: resp.sections };
+    $("#copyRelBtn").classList.remove("hidden"); $("#pdfRelBtn").classList.remove("hidden"); $("#saveHistRelBtn").classList.remove("hidden");
     if ((resp.notes || []).length) console.warn("[relatório]", resp.notes.join(" | "));
     // preenche a análise de cada seção (Gemini/Claude) — em paralelo
     resp.sections.forEach((sec) => fillReportAnalysis(sec, cName, monthLabel));
@@ -2265,6 +2265,27 @@ function pointsToHtml(points) {
 }
 
 // exportar o relatório visível em PDF nítido (A4)
+$("#saveHistRelBtn").addEventListener("click", async () => {
+  const doc = document.querySelector("#repBody .rr-page");
+  const d = state.repDoc || {};
+  if (!doc || !d.projectId) { toast("Gere o relatório primeiro.", true); return; }
+  const btn = $("#saveHistRelBtn"), old = btn.textContent;
+  btn.textContent = "💾 salvando…"; btn.disabled = true;
+  try {
+    // salva o HTML final (com análises e edições), mas SEM os controles de edição (ficariam inertes no histórico)
+    const clone = doc.cloneNode(true);
+    clone.querySelectorAll(".rr-kpi-x,.rr-addmetric-wrap,.rr-metricmenu,.rr-remove,.rr-clock").forEach((el) => el.remove());
+    clone.querySelectorAll("[contenteditable]").forEach((el) => el.removeAttribute("contenteditable"));
+    await window.api.historySave({
+      projectId: d.projectId, clientName: d.cName, kind: "report",
+      monthLabel: d.monthLabel, title: `Relatório ${d.monthLabel}`,
+      html: `<div class="rr-page">${clone.innerHTML}</div>`,
+    });
+    toast(`Relatório de ${d.monthLabel} salvo no histórico do cliente.`);
+  } catch (e) { toast("Erro ao salvar: " + e.message, true); }
+  finally { btn.textContent = old; btn.disabled = false; }
+});
+
 $("#pdfRelBtn").addEventListener("click", async () => {
   const doc = document.querySelector("#repBody .rr-page");
   if (!doc) { toast("Gere o relatório primeiro.", true); return; }
@@ -2278,14 +2299,84 @@ $("#pdfRelBtn").addEventListener("click", async () => {
   finally { btn.textContent = old; btn.disabled = false; }
 });
 
-// remover uma plataforma do relatório (botão ✕ na seção) — some do PDF/cópia junto
+// ---- edição do relatório: remover plataforma, remover métrica, adicionar métrica ----
+const geralOf = (sec) => sec.querySelector('[data-analysis$="-geral"]');
+function stripMetricPoint(sec, label) {
+  const g = geralOf(sec); if (!g) return;
+  const norm = (s) => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const L = norm(label);
+  const h = [...g.children].find((el) => el.tagName === "H4" && (() => { const t = norm(el.textContent); return t === L || t.includes(L) || L.includes(t); })());
+  if (!h) return;
+  const rm = [h]; let n = h.nextElementSibling;
+  while (n && n.tagName !== "H4") { rm.push(n); n = n.nextElementSibling; }
+  rm.forEach((el) => el.remove());
+}
+function appendPoint(g, title, body) {
+  const h = document.createElement("h4"); h.textContent = title;
+  const p = document.createElement("p"); p.textContent = body;
+  g.appendChild(h); g.appendChild(p);
+}
+async function addMetricAnalysis(sec, secData, m) {
+  const g = geralOf(sec); const d = state.repDoc || {};
+  const ph = document.createElement("p"); ph.className = "rr-ph"; ph.textContent = "⏳ analisando " + m.label + "…";
+  if (g) g.appendChild(ph);
+  try {
+    const txt = await window.api.reportAnalyzeMetric({ clientName: d.cName, monthLabel: d.monthLabel, platformLabel: secData ? secData.label : "", label: m.label, kind: m.kind, value: m.value, prev: m.prev });
+    const pts = parseAnalysisPoints(txt);
+    if (ph.parentNode) ph.remove();
+    if (g) { if (pts.length) pts.forEach((pt) => appendPoint(g, pt.title || m.label, pt.body)); else appendPoint(g, m.label, String(txt).replace(/^\s*##\s*.*\n?/, "").trim()); }
+  } catch (e) { ph.textContent = "⚠️ " + e.message; }
+}
 $("#repBody").addEventListener("click", (e) => {
-  const b = e.target.closest(".rr-remove");
-  if (!b) return;
-  const sec = b.closest(".rr-section"); if (!sec) return;
-  sec.remove();
-  const rest = document.querySelectorAll("#repBody .rr-section");
-  if (!rest.length) { $("#pdfRelBtn").classList.add("hidden"); $("#copyRelBtn").classList.add("hidden"); }
+  // remover plataforma inteira
+  const rb = e.target.closest(".rr-remove");
+  if (rb) {
+    const sec = rb.closest(".rr-section"); if (!sec) return;
+    sec.remove();
+    const rest = document.querySelectorAll("#repBody .rr-section");
+    if (!rest.length) { $("#pdfRelBtn").classList.add("hidden"); $("#copyRelBtn").classList.add("hidden"); const sh = $("#repSaveHistBtn"); if (sh) sh.classList.add("hidden"); }
+    return;
+  }
+  // remover uma métrica (KPI ✕)
+  const xb = e.target.closest(".rr-kpi-x");
+  if (xb) {
+    const card = xb.closest(".rr-kpi"); if (!card) return;
+    const label = card.dataset.metric, sec = card.closest(".rr-section");
+    card.remove();
+    if (sec && label) stripMetricPoint(sec, label);
+    return;
+  }
+  // abrir/fechar menu de adicionar métrica
+  const ab = e.target.closest(".rr-addmetric");
+  if (ab) {
+    const sec = ab.closest(".rr-section");
+    const existing = sec.querySelector(".rr-metricmenu");
+    if (existing) { existing.remove(); return; }
+    const secData = (state.repDoc.sections || []).find((s) => s.platform === ab.dataset.platform);
+    const extra = (secData && secData.extraMetrics) || [];
+    const shown = new Set([...sec.querySelectorAll(".rr-kpi")].map((k) => k.dataset.metric));
+    const avail = extra.filter((m) => !shown.has(m.label));
+    if (!avail.length) { toast("Sem métricas extras disponíveis pra esta plataforma.", true); return; }
+    const menu = document.createElement("div"); menu.className = "rr-metricmenu";
+    menu.innerHTML = avail.map((m, i) => `<button type="button" data-mi="${i}">➕ ${m.label}</button>`).join("");
+    menu._avail = avail;
+    ab.parentElement.after(menu);
+    return;
+  }
+  // escolher uma métrica do menu
+  const mb = e.target.closest(".rr-metricmenu button");
+  if (mb) {
+    const menu = mb.closest(".rr-metricmenu"), sec = menu.closest(".rr-section");
+    const platform = (sec.querySelector(".rr-addmetric") || {}).dataset ? sec.querySelector(".rr-addmetric").dataset.platform : null;
+    const secData = (state.repDoc.sections || []).find((s) => s.platform === platform);
+    const m = (menu._avail || [])[+mb.dataset.mi];
+    menu.remove();
+    if (!m) return;
+    const grid = sec.querySelector(".rr-kpis");
+    if (grid) { const tmp = document.createElement("div"); tmp.innerHTML = ReportView.kpiCardHtml(m, true); const card = tmp.firstElementChild; grid.appendChild(card); }
+    addMetricAnalysis(sec, secData, m);
+    return;
+  }
 });
 
 // gera (ou regenera) a análise de UMA plataforma e preenche as 3 caixas
@@ -2397,7 +2488,14 @@ async function renderHistory() {
   const list = await window.api.historyList(projectId);
   const actions = await window.api.listActions(projectId);
   if (!list.length && !actions.length) { body.innerHTML = '<div class="state"><div class="big">🗂️</div>Nenhuma semana salva nem ação registrada ainda para este cliente.</div>'; return; }
-  list.sort((a, b) => (a.start < b.start ? 1 : -1));
+  const reports = list.filter((h) => h.kind === "report").sort((a, b) => (a.savedAt < b.savedAt ? 1 : -1));
+  const weeks = list.filter((h) => h.kind !== "report").sort((a, b) => (a.start < b.start ? 1 : -1));
+  const reportsHtml = reports.length ? `<div class="section-title">📄 Relatórios salvos</div><div class="hist-list">` + reports.map((h) => `
+    <div class="hist-item" data-id="${h.id}" data-kind="report">
+      <div style="flex:1"><div class="hist-week">${h.title || ("Relatório " + (h.monthLabel || ""))}</div>
+        <div class="hist-meta">salvo em ${new Date(h.savedAt).toLocaleDateString("pt-BR")}</div></div>
+      <button class="chip-btn hist-del" data-id="${h.id}" title="Excluir do histórico">🗑️</button>
+    </div>`).join("") + "</div>" : "";
   const actHtml = actions.length ? `<div class="section-title">🛠️ Ações de otimização (na conta de anúncio)</div>`
     + actions.map((a, ai) => `<div class="hist-item" style="cursor:default">
         <div style="flex:1"><div class="hist-week">${a.type === "negativacao" ? "🚫" : a.type === "keyword" ? "➕" : a.type === "toggle" ? "⚙️" : a.type === "creative" ? "🎨" : a.type === "ekyte" ? "📋" : "•"} ${a.summary}</div>
@@ -2405,14 +2503,20 @@ async function renderHistory() {
         ${(a.type === "negativacao" || a.type === "keyword") ? `<button class="chip-btn act-trello" data-ai="${ai}">📋 Enviar pro Trello</button>` : ""}
       </div>`).join("") : "";
   state._actions = actions;
-  const weeksHtml = list.length ? `<div class="section-title">📅 Semanas analisadas</div><div class="hist-list">` + list.map((h) => `
+  const weeksHtml = weeks.length ? `<div class="section-title">📅 Semanas analisadas</div><div class="hist-list">` + weeks.map((h) => `
     <div class="hist-item" data-id="${h.id}">
       <div style="flex:1"><div class="hist-week">Período ${h.weekLabel}</div>
         <div class="hist-meta">${h.itemsCount} otimizações · salvo em ${new Date(h.savedAt).toLocaleDateString("pt-BR")}</div></div>
       ${h.trello?.optCardUrl ? '<span class="hist-pill">Trello ✓</span>' : ""}
     </div>`).join("") + "</div>" : "";
-  body.innerHTML = actHtml + weeksHtml + "<div id=\"histDetail\"></div>";
-  $$(".hist-item[data-id]").forEach((el) => el.addEventListener("click", () => openHistory(el.dataset.id)));
+  body.innerHTML = reportsHtml + actHtml + weeksHtml + "<div id=\"histDetail\"></div>";
+  $$(".hist-item[data-id]").forEach((el) => el.addEventListener("click", (ev) => { if (ev.target.closest(".hist-del")) return; openHistory(el.dataset.id); }));
+  $$(".hist-del").forEach((b) => b.addEventListener("click", async (ev) => {
+    ev.stopPropagation();
+    if (!window.confirm("Excluir este relatório do histórico?")) return;
+    await window.api.historyDelete(b.dataset.id);
+    renderHistory();
+  }));
   $$(".act-trello").forEach((b) => b.addEventListener("click", async () => {
     const a = (state._actions || [])[+b.dataset.ai]; if (!a) return;
     const c = state.clients.find((x) => x.projectId === a.projectId);
@@ -2441,6 +2545,20 @@ async function openHistory(id) {
   const h = await window.api.historyGet(id);
   if (!h) return;
   const det = $("#histDetail");
+  if (h.kind === "report") {
+    det.innerHTML = `<div class="section-title">${h.title || ("Relatório " + (h.monthLabel || ""))}</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px"><button class="chip-btn" id="histRepPdf">📄 Exportar PDF</button></div>
+      <div class="rr-doc" style="border:1px solid var(--line);border-radius:12px;overflow:hidden">${h.html || "<i>sem conteúdo</i>"}</div>`;
+    const pb = $("#histRepPdf");
+    if (pb) pb.addEventListener("click", async () => {
+      pb.disabled = true; const o = pb.textContent; pb.textContent = "⏳ gerando…";
+      try { const r = await window.api.reportExportPdf({ html: h.html, title: `${h.clientName || "relatorio"} - ${h.monthLabel || ""}` }); if (r && r.saved) toast("PDF salvo!"); }
+      catch (e) { toast("Erro no PDF: " + e.message, true); }
+      finally { pb.disabled = false; pb.textContent = o; }
+    });
+    det.scrollIntoView({ behavior: "smooth" });
+    return;
+  }
   const checklist = (h.items || []).map((it) => `<div class="tp-item"><div>${it.text}</div></div>`).join("");
   det.innerHTML = `<div class="section-title">Semana de ${h.weekLabel}</div>
     <div class="card"><div class="tp-check">✅ Otimizações enviadas (${(h.items || []).length})</div>${checklist || "<i>sem itens</i>"}

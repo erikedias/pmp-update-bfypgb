@@ -775,6 +775,19 @@ function buildReportAnalysisPrompt(d) {
 }
 ipcMain.handle("report:analyzeSection", async (_e, d) => aiAnalyze(readStore().settings, buildReportAnalysisPrompt(d)));
 
+// análise de UMA métrica só (quando a analista adiciona uma métrica ao relatório)
+ipcMain.handle("report:analyzeMetric", async (_e, d) => {
+  const fv = (kind, v) => (v == null || isNaN(v)) ? "sem dado" : kind === "brl" ? "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : kind === "pct" ? parseFloat(Number(v).toFixed(2)) + "%" : kind === "num2" ? Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Number(v).toLocaleString("pt-BR");
+  const dl = (v, p) => (p == null || p === 0 || v == null) ? "" : (() => { const x = parseFloat(((v - p) / p * 100).toFixed(1)); return ` (${x > 0 ? "+" : ""}${x}% vs período anterior)`; })();
+  const prompt = [
+    `Você é analista de mídia paga. Escreva UM único ponto de análise da métrica "${d.label}" da plataforma ${d.platformLabel || ""} no relatório do cliente "${d.clientName || ""}" (${d.monthLabel || ""}). Este texto vai direto pro cliente.`,
+    `FORMATO: comece com "## ${d.label}" e, na linha seguinte, um parágrafo curto (2 a 4 frases) analisando só essa métrica, comparando com o período anterior quando houver e explicando o que ela indica.`,
+    `Valor: ${fv(d.kind, d.value)}${dl(d.value, d.prev)}.`,
+    `REGRAS: já é a análise pronta — NÃO diga "vou analisar", sem meta-texto, sem traços/asteriscos/markdown além do "## ", em português, tom profissional. Se o valor for zero/ausente, comente com naturalidade sem inventar número.`,
+  ].join("\n");
+  return aiAnalyze(readStore().settings, prompt);
+});
+
 // prompt livre (usado pelo Funil Studio embutido pra montar estratégias por descrição)
 ipcMain.handle("gemini:raw", async (_e, { prompt }) => aiAnalyze(readStore().settings, prompt));
 
@@ -2326,8 +2339,18 @@ async function metaReportSection(accountId, start, end, prevStart, prevEnd, name
   try { const g = await graphInsights(acc, tok, start, end, { breakdowns: "gender", fields: "impressions,reach" }); if (g.length) { const map = { female: "Feminino", male: "Masculino", unknown: "Desconhecido" }, m = {}; g.forEach((r) => { const k = map[r.gender] || r.gender; m[k] = m[k] || { i: 0, c: 0 }; m[k].i += n(r.impressions); m[k].c += n(r.reach); }); const k = Object.keys(m); charts.gender = { labels: k, impressions: k.map((x) => m[x].i), reach: k.map((x) => m[x].c) }; } } catch {}
   try { const dv = await graphInsights(acc, tok, start, end, { breakdowns: "impression_device", fields: "reach" }); if (dv.length) { const bk = (v) => /desktop/.test(v) ? "Desktop" : /mobile_web|www/.test(v) ? "Mobile web" : "Mobile app"; const m = {}; dv.forEach((r) => { const k = bk(r.impression_device || ""); m[k] = (m[k] || 0) + n(r.reach); }); const col = { "Mobile app": "#2563eb", "Desktop": "#22c55e", "Mobile web": "#7cc4ff" }; charts.device = Object.keys(m).map((k) => ({ label: k, value: m[k], color: col[k] || "#94a3b8" })); } } catch {}
 
+  // métricas EXTRAS que a analista pode adicionar ao relatório (não vêm por padrão)
+  const cpX = (s, v) => v ? s / v : null;
+  const extraMetrics = [];
+  const addX = (cond, m) => { if (cond) extraMetrics.push(m); };
+  addX(T.purch > 0 || P.purch > 0, { label: "Compras", kind: "int", value: T.purch, prev: P.purch });
+  addX(T.purch > 0, { label: "Custo por compra", kind: "brl", value: cpX(T.spend, T.purch), prev: cpX(P.spend, P.purch) });
+  addX(T.msg > 0 || P.msg > 0, { label: "Conversas por mensagem", kind: "int", value: T.msg, prev: P.msg });
+  addX(T.msg > 0, { label: "Custo por conversa", kind: "brl", value: cpX(T.spend, T.msg), prev: cpX(P.spend, P.msg) });
+  addX(T.lpv > 0 || P.lpv > 0, { label: "Visitas à página de destino", kind: "int", value: T.lpv, prev: P.lpv });
+  addX(T.clk > 0 && T.leads > 0, { label: "Taxa de preenchimento", kind: "pct", value: T.clk ? T.leads / T.clk * 100 : null, prev: P.clk ? P.leads / P.clk * 100 : null });
   return {
-    platform: "meta", label: "Meta Ads", subtitle: name || "", accent: "#1877f2", kpis, funnel, charts,
+    platform: "meta", label: "Meta Ads", subtitle: name || "", accent: "#1877f2", kpis, funnel, charts, extraMetrics,
     blocks: [
       { type: "analysis", id: "meta-geral" },
       { type: "title", text: "Campanhas em destaque" },
@@ -2516,7 +2539,7 @@ ipcMain.handle("report:exportPdf", async (_e, { html, title }) => {
     @page{size:A4;margin:12mm}
     body{margin:0}
     .rr-page{max-width:none;padding:0}
-    .rr-remove,.rr-clock{display:none!important}
+    .rr-remove,.rr-clock,.rr-kpi-x,.rr-addmetric-wrap,.rr-metricmenu{display:none!important}
     .rr-tbl-wrap{overflow:visible!important}
     table.rr-tbl{width:100%!important;table-layout:fixed!important;font-size:10px!important}
     table.rr-tbl th:first-child,table.rr-tbl td:first-child{width:22%!important}
@@ -2872,8 +2895,9 @@ ipcMain.handle("gemini:report", async (_e, { clientName, monthLabel, platformRes
 
 ipcMain.handle("history:list", (_e, projectId) =>
   readStore().history.filter((h) => !projectId || h.projectId === projectId)
-    .map((h) => ({ id: h.id, weekLabel: h.weekLabel, start: h.start, end: h.end, savedAt: h.savedAt, clientName: h.clientName, itemsCount: (h.items || []).length, trello: h.trello })));
+    .map((h) => ({ id: h.id, kind: h.kind || "week", weekLabel: h.weekLabel, monthLabel: h.monthLabel, title: h.title, start: h.start, end: h.end, savedAt: h.savedAt, clientName: h.clientName, itemsCount: (h.items || []).length, trello: h.trello })));
 ipcMain.handle("history:get", (_e, id) => readStore().history.find((h) => h.id === id) || null);
+ipcMain.handle("history:delete", (_e, id) => { const st = readStore(); st.history = (st.history || []).filter((h) => h.id !== id); writeStore(st); return true; });
 
 // log de AÇÕES de otimização (negativação, palavras-chave...) por cliente
 ipcMain.handle("action:log", (_e, a) => {
@@ -2886,9 +2910,13 @@ ipcMain.handle("action:log", (_e, a) => {
 ipcMain.handle("action:list", (_e, projectId) => (readStore().actions || []).filter((a) => !projectId || a.projectId === projectId).sort((x, y) => (y.at || "").localeCompare(x.at || "")));
 ipcMain.handle("history:save", (_e, record) => {
   const st = readStore();
-  record.id = record.id || `${record.projectId}-${record.start}-${Date.now()}`;
+  const kind = record.kind || "week";
+  record.kind = kind;
+  record.id = record.id || `${record.projectId}-${kind}-${record.start || record.monthLabel || Date.now()}-${Date.now()}`;
   record.savedAt = new Date().toISOString();
-  const ix = st.history.findIndex((h) => h.projectId === record.projectId && h.start === record.start);
+  // dedup por tipo: semana (projectId+start) ou relatório (projectId+monthLabel) — não colidem entre si
+  const ix = st.history.findIndex((h) => h.projectId === record.projectId && (h.kind || "week") === kind &&
+    (kind === "report" ? h.monthLabel === record.monthLabel : h.start === record.start));
   if (ix >= 0) st.history[ix] = record; else st.history.push(record);
   writeStore(st);
   return record.id;

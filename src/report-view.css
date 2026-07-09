@@ -47,7 +47,18 @@
 
 /* -------- grade de KPIs -------- */
 .rr-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px 18px; margin: 8px 0 30px; }
-.rr-kpi { text-align: center; }
+.rr-kpi { text-align: center; position: relative; }
+/* remover métrica (✕ no canto, aparece no hover; some no PDF) */
+.rr-kpi-x { position: absolute; top: -7px; right: 4px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--rr-card-line); background: #fff; color: var(--rr-muted); font-size: 10px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .12s, color .12s, background .12s; padding: 0; z-index: 2; }
+.rr-kpi:hover .rr-kpi-x { opacity: 1; }
+.rr-kpi-x:hover { color: var(--rr-down); background: var(--rr-down-bg); border-color: #f6cccc; }
+/* adicionar métrica */
+.rr-addmetric-wrap { grid-column: 1 / -1; text-align: center; margin-top: 4px; }
+.rr-addmetric { font-size: 12px; font-weight: 600; color: var(--rr-accent, var(--rr-meta)); background: #f4f7ff; border: 1px dashed var(--rr-accent, var(--rr-meta)); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+.rr-addmetric:hover { background: #eaf0ff; }
+.rr-metricmenu { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 8px; grid-column: 1 / -1; }
+.rr-metricmenu button { font-size: 11.5px; color: var(--rr-ink-2); background: #f4f6f8; border: 1px solid var(--rr-card-line); border-radius: 7px; padding: 5px 9px; cursor: pointer; }
+.rr-metricmenu button:hover { background: #eef2ff; border-color: var(--rr-accent, var(--rr-meta)); color: var(--rr-accent, var(--rr-meta)); }
 .rr-kpi .k-lbl { font-size: 13px; font-weight: 700; color: var(--rr-ink-2); display: inline-flex; align-items: center; gap: 5px; justify-content: center; }
 .rr-kpi .k-q { width: 15px; height: 15px; border-radius: 50%; background: #eef1f5; color: #9aa4b2; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
 .rr-kpi .k-row { margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
@@ -135,7 +146,7 @@ table.rr-tbl .r-sub { display: block; font-size: 11px; color: var(--rr-muted); f
   table.rr-tbl tr { break-inside: avoid; }
   .rr-head, .rr-title { break-after: avoid; }
   .rr-fcard { min-height: 200px; }
-  .rr-remove, .rr-clock { display: none !important; }
+  .rr-remove, .rr-clock, .rr-kpi-x, .rr-addmetric-wrap, .rr-metricmenu { display: none !important; }
   /* no PDF não tem como rolar — encolhe e permite quebra de linha pra nenhuma coluna ficar de fora */
   .rr-tbl-wrap { overflow: visible; }
   table.rr-tbl { width: 100%; table-layout: fixed; font-size: 10px; }
