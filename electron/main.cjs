@@ -1670,7 +1670,16 @@ const ADS_FROM_KW_PROMPT = `Você é especialista em Google Ads (Rede de Pesquis
 TÍTULOS (15 — máx 30 caracteres cada): ao menos 6 usando as palavras-chave principais (ou uma variação bem próxima) para casar com a busca, 3 de benefício/resultado, 2 de oferta/diferencial, 2 de prova social/autoridade, 2 de CTA. Mostre o texto e a contagem de caracteres de cada um.
 DESCRIÇÕES (4 — máx 90 caracteres cada): 2 de benefícios/diferenciais que aparecem na página, 1 de oferta/diferencial, 1 de CTA. Com a contagem de caracteres.
 CAMINHOS DE EXIBIÇÃO (2 — máx 15 caracteres cada), coerentes com a página.
-Não prometa nada que a página de destino não entrega. Português. Respeite os limites do RSA. Sem markdown de título com #.`;
+
+Depois do anúncio, gere TODOS os RECURSOS (assets/extensões) que dá pra configurar no Google Ads para deixar o anúncio completo — cada um coerente com a página de destino:
+SITELINKS (4 a 6): cada um com Texto do link (máx 25 caracteres) + 2 linhas de descrição (máx 35 caracteres cada) + a página de destino sugerida (uma seção/âncora real do site, ex.: /sobre, /planos, #contato). Mostre a contagem de caracteres de cada campo.
+FRASES DE DESTAQUE / CALLOUTS (6 a 8 — máx 25 caracteres cada): diferenciais curtos (ex.: "Atendimento rápido", "Sem fidelidade"). Não repita o que já está nos títulos. Com contagem.
+SNIPPETS ESTRUTURADOS (1 a 2): escolha o Cabeçalho de uma lista OFICIAL do Google (Serviços, Marcas, Cursos, Bairros, Tipos, Modelos, Comodidades, Destinos, Programas, Seguros, Estilos, Destaques) + 3 a 6 valores (máx 25 caracteres cada) coerentes com a página.
+ATIVO DE PREÇO (se a página tiver planos/valores — senão escreva "não se aplica"): 3 a 8 itens, cada um com Título (máx 25) + Descrição (máx 25) + preço + URL.
+ATIVO DE PROMOÇÃO (se houver oferta/desconto na página — senão "não se aplica"): ocasião, tipo de desconto, item promovido (máx 20), detalhes (máx 25).
+ATIVO DE CHAMADA (se houver telefone na página): informe o telefone encontrado; senão escreva "sem telefone na página".
+ATIVO DE FORMULÁRIO DE LEAD (sugira título de chamada máx 30 + descrição máx 200, se fizer sentido pro negócio).
+Não prometa nada que a página de destino não entrega. Português. Respeite RIGOROSAMENTE os limites de caracteres de cada campo. Sem markdown de título com #.`;
 
 ipcMain.handle("gads:adsFromKeywords", async (_e, { keywords, url, service, clientName, persona, oQueNaoFaz }) => {
   const s = readStore().settings;

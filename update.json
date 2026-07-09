@@ -1,6 +1,6 @@
 {
-  "version": "1.3.8",
-  "notes": "Google Ads: novo gerador de títulos e descrições (RSA) a partir das palavras-chave selecionadas + leitura da página de destino, pra o anúncio ficar coerente com a busca e a LP. Relatório: análise agora inclui taxa de preenchimento (leads/cliques) e, quando o cliente tem planilha de leads, taxa de MQL/SQL (sem inventar quando não houver). Funil trocado para o estilo horizontal (cards lado a lado com curva de fluxo e taxa de conversão entre etapas).",
+  "version": "1.3.9",
+  "notes": "Gerador de anúncios do Google Ads agora entrega o anúncio COMPLETO: além de títulos, descrições e caminhos, gera todos os recursos configuráveis — sitelinks (com descrições e destino), frases de destaque (callouts), snippets estruturados, ativo de preço, promoção, chamada e formulário de lead — todos coerentes com a página de destino e dentro dos limites de caractere.",
   "files": [
     "src/app.js",
     "src/engine.js",
