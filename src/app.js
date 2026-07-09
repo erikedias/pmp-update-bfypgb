@@ -1794,17 +1794,72 @@ function renderKwVol(list) {
     btn.disabled = true; btn.textContent = "Gerando…";
     out.innerHTML = '<div class="state">⏳ Lendo a página de destino e escrevendo os anúncios coerentes com as palavras-chave…</div>';
     try {
-      const txt = await window.api.gadsAdsFromKeywords({
+      const res = await window.api.gadsAdsFromKeywords({
         keywords: sel, url: $("#kwUrl").value.trim(),
         service: $("#kwService").value.trim() || prof.servico || prof.oQueFaz || "",
         clientName: c ? c.name : "", persona: prof.personaDoc || "", oQueNaoFaz: prof.oQueNaoFaz || "",
       });
+      const txt = (res && typeof res === "object") ? (res.text || "") : String(res || "");
+      state.kwVolAdsData = (res && typeof res === "object") ? res.data : null;
       out.dataset.raw = txt;
-      out.innerHTML = `<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px"><button class="chip-btn" id="kwVolAdsCopy">📋 Copiar</button><button class="chip-btn" id="kwVolAdsObs">💾 Salvar no Obsidian</button></div>` + mdToHtml(txt);
+      out.innerHTML = `<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px"><button class="chip-btn" id="kwVolAdsCopy">📋 Copiar</button><button class="chip-btn" id="kwVolAdsObs">💾 Salvar no Obsidian</button></div>` + mdToHtml(txt) + uploadPanelHtml(c);
       $("#kwVolAdsCopy").addEventListener("click", () => { navigator.clipboard.writeText(out.dataset.raw); toast("Anúncios copiados."); });
       const ob = $("#kwVolAdsObs"); if (ob) ob.addEventListener("click", () => saveObsidian(kwClient(), "Anúncios Google (títulos e descrições)", out.dataset.raw, ob));
+      wireUploadPanel();
     } catch (e) { out.innerHTML = `<div class="state error">❌ ${e.message}</div>`; }
     btn.disabled = false; btn.textContent = "✍️ Gerar títulos e descrições";
+  });
+}
+
+// painel pra subir a campanha de Rede de Pesquisa como rascunho no Google Ads
+function uploadPanelHtml(c) {
+  const gid = c && c.adAccounts && c.adAccounts.google;
+  const d = state.kwVolAdsData;
+  if (!d || !(d.headlines || []).length) return `<p class="sub" style="margin-top:14px;color:#e0a97a">Pra subir direto no Google Ads, gere os anúncios de novo (a versão nova já monta a estrutura pronta pra subir).</p>`;
+  if (!gid) return `<p class="sub" style="margin-top:14px;color:#e0a97a">Vincule a conta Google deste cliente em ⚙️ Configurações → "contas" pra subir a campanha por aqui.</p>`;
+  const svc = ($("#kwService").value.trim().split(/[.,\n]/)[0] || "Pesquisa").slice(0, 40);
+  const defName = `Pesquisa · ${(c && c.name) || svc}`;
+  const m = ($("#kwVolMatch") || {}).value || "phrase";
+  const opt = (v, l) => `<option value="${v}"${v === m ? " selected" : ""}>${l}</option>`;
+  return `<div class="card" id="kwUpBox" style="margin-top:16px;border:1px solid rgba(25,227,162,.3)">
+    <h2 style="font-size:15px">🚀 Subir no Google Ads como rascunho</h2>
+    <p class="sub">Cria uma campanha de <b>Rede de Pesquisa</b> pausada com o grupo, as palavras-chave marcadas e este anúncio (títulos, descrições, caminhos + extensões). Você ajusta o resto no Google.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+      <div class="formrow" style="flex:1;min-width:220px;margin:0"><label>Nome da campanha</label><input type="text" id="kwUpName" value="${defName.replace(/"/g, "&quot;")}"></div>
+      <div class="formrow" style="margin:0"><label>Orçamento diário (R$)</label><input type="number" id="kwUpBudget" value="30" min="1" style="width:130px"></div>
+      <div class="formrow" style="margin:0"><label>Correspondência</label><select id="kwUpMatch" style="min-width:120px">${opt("phrase", '"Frase"')}${opt("exact", "[Exata]")}${opt("broad", "Ampla")}</select></div>
+      <button class="btn btn-purple" id="kwUpBtn">🚀 Subir rascunho</button>
+    </div>
+    <div id="kwUpLog" style="margin-top:12px"></div>
+  </div>`;
+}
+function wireUploadPanel() {
+  const btn = $("#kwUpBtn"); if (!btn) return;
+  btn.addEventListener("click", async () => {
+    const c = kwClient(); const gid = c && c.adAccounts && c.adAccounts.google;
+    const d = state.kwVolAdsData || {};
+    const results = state.kwVolResults || [];
+    let sel = [...$$(".kwvol-ck")].filter((x) => x.checked).map((x) => results[+x.dataset.i].termo);
+    if (!sel.length) sel = results.map((k) => k.termo);
+    const name = $("#kwUpName").value.trim() || "Pesquisa";
+    const budget = parseFloat($("#kwUpBudget").value) || 30;
+    const matchType = { phrase: "PHRASE", exact: "EXACT", broad: "BROAD" }[($("#kwUpMatch") || {}).value || "phrase"];
+    const log = $("#kwUpLog");
+    if (!window.confirm(`Criar a campanha de Pesquisa "${name}" PAUSADA (rascunho) com ${sel.length} palavra(s)-chave e este anúncio? Nada vai ao ar até você ativar no Google Ads.`)) return;
+    btn.disabled = true; btn.textContent = "Subindo…";
+    log.innerHTML = '<div class="state">⏳ Criando orçamento, campanha, grupo, palavras-chave, anúncio e extensões…</div>';
+    try {
+      const r = await window.api.gadsCreateSearchDraft({
+        customerId: gid, campaignName: name, finalUrl: $("#kwUrl").value.trim(),
+        keywords: sel, matchType, dailyBudget: budget,
+        headlines: d.headlines, descriptions: d.descriptions,
+        path1: (d.paths || [])[0], path2: (d.paths || [])[1],
+        sitelinks: d.sitelinks, callouts: d.callouts, snippet: d.snippet,
+      });
+      const escLog = (l) => String(l).replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch]));
+      log.innerHTML = `<div class="warnbar" style="background:rgba(25,227,162,.07);border-color:rgba(25,227,162,.3);color:#7be8c0">✅ Rascunho criado na conta! <b>${escLog(r.campaignName)}</b> (id ${escLog(r.campId)}) — pausada, pronta pra você revisar no Google Ads.</div><div style="margin-top:8px;font-size:13px;line-height:1.9">${(r.log || []).map(escLog).join("<br>")}</div>`;
+    } catch (e) { log.innerHTML = `<div class="state error">❌ ${e.message}</div>`; }
+    btn.disabled = false; btn.textContent = "🚀 Subir rascunho";
   });
 }
 

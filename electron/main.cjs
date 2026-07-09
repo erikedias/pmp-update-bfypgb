@@ -1679,7 +1679,11 @@ ATIVO DE PREÇO (se a página tiver planos/valores — senão escreva "não se a
 ATIVO DE PROMOÇÃO (se houver oferta/desconto na página — senão "não se aplica"): ocasião, tipo de desconto, item promovido (máx 20), detalhes (máx 25).
 ATIVO DE CHAMADA (se houver telefone na página): informe o telefone encontrado; senão escreva "sem telefone na página".
 ATIVO DE FORMULÁRIO DE LEAD (sugira título de chamada máx 30 + descrição máx 200, se fizer sentido pro negócio).
-Não prometa nada que a página de destino não entrega. Português. Respeite RIGOROSAMENTE os limites de caracteres de cada campo. Sem markdown de título com #.`;
+Não prometa nada que a página de destino não entrega. Português. Respeite RIGOROSAMENTE os limites de caracteres de cada campo. Sem markdown de título com #.
+
+No FINAL de tudo, após uma linha isolada com exatamente ===JSON===, devolva SOMENTE um JSON válido (sem crases, sem comentários, sem texto depois) com os textos EXATOS que você gerou, para subir na API do Google Ads:
+{"headlines":["até 15 títulos, cada um ≤30 caracteres"],"descriptions":["até 4 descrições, cada uma ≤90"],"paths":["caminho1 ≤15","caminho2 ≤15"],"sitelinks":[{"text":"≤25","desc1":"≤35","desc2":"≤35","path":"/secao-do-site"}],"callouts":["≤25"],"snippet":{"header":"cabeçalho oficial do Google","values":["≤25"]}}
+Não coloque no JSON nada que ultrapasse os limites. Se algum recurso for "não se aplica", devolva lista vazia ([]) ou null para ele.`;
 
 ipcMain.handle("gads:adsFromKeywords", async (_e, { keywords, url, service, clientName, persona, oQueNaoFaz }) => {
   const s = readStore().settings;
@@ -1700,7 +1704,87 @@ ipcMain.handle("gads:adsFromKeywords", async (_e, { keywords, url, service, clie
     `\n== PÁGINA DE DESTINO (${url || "sem URL"}) — o anúncio precisa ser coerente com ela ==\n${pageTxt || "(não consegui ler a página — use as palavras-chave e o serviço abaixo)"}`,
     `\n== CONTEXTO DO CLIENTE ==\nCliente: ${clientName || ""}\nServiço: ${service || "(ver página)"}${oQueNaoFaz ? "\nNÃO faz: " + oQueNaoFaz : ""}${personaCtx}`,
   ].join("\n");
-  return await aiAnalyze(s, prompt);
+  const raw = await aiAnalyze(s, prompt);
+  // separa a parte visível (mostrada pra ela) do JSON estruturado (usado pra subir na API)
+  let text = raw, data = null;
+  const idx = raw.indexOf("===JSON===");
+  if (idx >= 0) {
+    text = raw.slice(0, idx).replace(/\s+$/, "");
+    try { const m = raw.slice(idx + 10).match(/\{[\s\S]*\}/); if (m) data = JSON.parse(m[0]); } catch {}
+  }
+  return { text, data };
+});
+
+// Sobe uma campanha de REDE DE PESQUISA como RASCUNHO (pausada): orçamento → campanha → grupo → palavras-chave → RSA → extensões
+ipcMain.handle("gads:createSearchDraft", async (_e, { customerId, campaignName, finalUrl, keywords, matchType, dailyBudget, headlines, descriptions, path1, path2, sitelinks, callouts, snippet }) => {
+  const cid = String(customerId || "").replace(/-/g, "");
+  if (!cid) throw new Error("Cliente sem conta Google vinculada (Customer ID) — configure em ⚙️ Configurações → contas.");
+  const heads = (headlines || []).map((t) => String(t || "").trim()).filter(Boolean).filter((t) => t.length <= 30).slice(0, 15);
+  const descs = (descriptions || []).map((t) => String(t || "").trim()).filter(Boolean).filter((t) => t.length <= 90).slice(0, 4);
+  const url = finalUrl && /\./.test(finalUrl) ? (/^https?:\/\//.test(finalUrl) ? finalUrl : "https://" + finalUrl) : "";
+  if (heads.length < 3) throw new Error("Precisa de ao menos 3 títulos (≤30 caracteres) — gere os anúncios de novo.");
+  if (descs.length < 2) throw new Error("Precisa de ao menos 2 descrições (≤90 caracteres) — gere os anúncios de novo.");
+  if (!url) throw new Error("Informe a página de destino no campo \"Site do cliente\".");
+  const kws = (keywords || []).map((k) => cleanKeyword(String(k))).filter(Boolean);
+  if (!kws.length) throw new Error("Selecione ao menos uma palavra-chave.");
+  const mt = ["EXACT", "PHRASE", "BROAD"].includes(matchType) ? matchType : "PHRASE";
+  const dailyMicros = Math.max(Math.round(Number(dailyBudget) || 30), 1) * 1e6;
+  const name = (campaignName || "Pesquisa").trim();
+  const headers = await gadsHeaders();
+  const mut = (res, operations) => googleAdsApi(`customers/${cid}/${res}:mutate`, { method: "POST", headers, body: JSON.stringify({ operations }) });
+  const log = [];
+
+  const bres = await mut("campaignBudgets", [{ create: { name: `${name} ${Date.now()}`, amountMicros: dailyMicros, deliveryMethod: "STANDARD", explicitlyShared: false } }]);
+  const budget = bres.results[0].resourceName;
+  const cres = await mut("campaigns", [{ create: { name: `${name} [RASCUNHO]`, status: "PAUSED", advertisingChannelType: "SEARCH", campaignBudget: budget, manualCpc: {}, networkSettings: { targetGoogleSearch: true, targetSearchNetwork: true, targetContentNetwork: false, targetPartnerSearchNetwork: false }, containsEuPoliticalAdvertising: "DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING" } }]);
+  const campaignRes = cres.results[0].resourceName, campId = campaignRes.split("/").pop();
+  log.push(`✅ Campanha de Rede de Pesquisa "${name}" criada pausada (id ${campId})`);
+  const ares = await mut("adGroups", [{ create: { name: name, campaign: campaignRes, status: "ENABLED", type: "SEARCH_STANDARD", cpcBidMicros: 1e6 } }]);
+  const agRes = ares.results[0].resourceName;
+  log.push("✅ Grupo de anúncios criado");
+  try {
+    const kops = kws.map((t) => ({ create: { adGroup: agRes, status: "ENABLED", keyword: { text: t, matchType: mt } } }));
+    const kr = await googleAdsApi(`customers/${cid}/adGroupCriteria:mutate`, { method: "POST", headers, body: JSON.stringify({ operations: kops, partialFailure: true }) });
+    log.push(`✅ ${mutateSummary(kr).ok}/${kops.length} palavra(s)-chave (${mt.toLowerCase()})`);
+  } catch (e) { log.push(`❌ palavras-chave: ${e.message}`); }
+  const rsa = { finalUrls: [url], responsiveSearchAd: { headlines: heads.map((t) => ({ text: t })), descriptions: descs.map((t) => ({ text: t })) } };
+  const cleanPath = (p) => String(p || "").replace(/[^0-9A-Za-zÀ-ſ]/g, "").slice(0, 15);
+  const p1 = cleanPath(path1), p2 = cleanPath(path2);
+  if (p1) rsa.responsiveSearchAd.path1 = p1;
+  if (p1 && p2) rsa.responsiveSearchAd.path2 = p2;
+  await mut("adGroupAds", [{ create: { adGroup: agRes, status: "PAUSED", ad: rsa } }]);
+  log.push(`✅ Anúncio RSA criado (${heads.length} títulos, ${descs.length} descrições)`);
+
+  // extensões (best-effort — falha de uma não derruba as outras)
+  try {
+    const cl = (callouts || []).map((t) => String(t || "").trim()).filter(Boolean).filter((t) => t.length <= 25).slice(0, 10);
+    if (cl.length) {
+      const ar = await mut("assets", cl.map((t) => ({ create: { calloutAsset: { calloutText: t } } })));
+      const links = (ar.results || []).map((r) => ({ create: { campaign: campaignRes, asset: r.resourceName, fieldType: "CALLOUT" } }));
+      if (links.length) { await mut("campaignAssets", links); log.push(`✅ ${links.length} frase(s) de destaque`); }
+    }
+  } catch (e) { log.push(`⚠️ frases de destaque não subiram: ${e.message}`); }
+  try {
+    const sl = (sitelinks || []).filter((s) => s && s.text).slice(0, 8);
+    if (sl.length) {
+      const ar = await mut("assets", sl.map((s) => {
+        const surl = s.path ? (/^https?:\/\//.test(s.path) ? s.path : url.replace(/\/+$/, "") + "/" + String(s.path).replace(/^\/+/, "")) : url;
+        return { create: { finalUrls: [surl], sitelinkAsset: { linkText: String(s.text).slice(0, 25), description1: String(s.desc1 || "").slice(0, 35), description2: String(s.desc2 || "").slice(0, 35) } } };
+      }));
+      const links = (ar.results || []).map((r) => ({ create: { campaign: campaignRes, asset: r.resourceName, fieldType: "SITELINK" } }));
+      if (links.length) { await mut("campaignAssets", links); log.push(`✅ ${links.length} sitelink(s)`); }
+    }
+  } catch (e) { log.push(`⚠️ sitelinks não subiram: ${e.message}`); }
+  try {
+    const vals = snippet && (snippet.values || []).map((v) => String(v || "").trim()).filter(Boolean).slice(0, 10);
+    if (snippet && snippet.header && vals && vals.length) {
+      const ar = await mut("assets", [{ create: { structuredSnippetAsset: { header: String(snippet.header).trim(), values: vals } } }]);
+      await mut("campaignAssets", [{ create: { campaign: campaignRes, asset: ar.results[0].resourceName, fieldType: "STRUCTURED_SNIPPET" } }]);
+      log.push(`✅ snippet estruturado (${snippet.header})`);
+    }
+  } catch (e) { log.push(`⚠️ snippet estruturado não subiu: ${e.message}`); }
+
+  return { ok: true, campId, campaignName: name, log };
 });
 
 ipcMain.handle("gads:plan", async (_e, { modulo, url, service, oQueNaoFaz, clientName, persona }) => {

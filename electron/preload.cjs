@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld("api", {
   googleAdsKeywordIdeas: (args) => ipcRenderer.invoke("googleads:keywordIdeas", args),
   gadsPlan: (args) => ipcRenderer.invoke("gads:plan", args),
   gadsAdsFromKeywords: (args) => ipcRenderer.invoke("gads:adsFromKeywords", args),
+  gadsCreateSearchDraft: (args) => ipcRenderer.invoke("gads:createSearchDraft", args),
   ga4Sessions: (args) => ipcRenderer.invoke("ga4:sessions", args),
 
   pageSpeedCheck: (args) => ipcRenderer.invoke("pagespeed:check", args),
