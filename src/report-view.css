@@ -104,6 +104,13 @@ table.rr-tbl .r-sub { display: block; font-size: 11px; color: var(--rr-muted); f
 .rr-section:hover .rr-remove { opacity: 1; }
 .rr-remove:hover { color: var(--rr-down); background: var(--rr-down-bg); border-color: #f6cccc; }
 
+/* -------- próximos passos (por plataforma, com base nos gargalos) -------- */
+.rr-nextsteps { margin: 22px 0 8px; padding: 16px 20px; border: 1px solid var(--rr-card-line); border-left: 4px solid var(--rr-accent, var(--rr-meta)); border-radius: 10px; background: #fbfcfe; }
+.rr-ns-title { font-size: 15px; font-weight: 800; color: var(--rr-ink); margin-bottom: 8px; }
+.rr-nextsteps .rr-analysis { margin: 0; font-size: 13.5px; }
+.rr-nextsteps .rr-analysis h4 { margin-top: 10px; }
+.rr-nextsteps .rr-analysis h4:first-child { margin-top: 0; }
+
 @media print {
   .rr-page { max-width: none; padding: 0 24px; }
   .rr-section { break-inside: avoid-page; }

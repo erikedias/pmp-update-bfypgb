@@ -2136,8 +2136,9 @@ async function gerarRelatorio() {
 // preenche o bloco de análise de UMA seção (Meta/Google/LinkedIn) com o texto da IA
 async function fillReportAnalysis(sec, cName, monthLabel) {
   const sel = (b) => document.querySelector(`#repBody [data-analysis="${sec.platform}-${b}"]`);
-  const geral = sel("geral"), publicos = sel("publicos"), anuncios = sel("anuncios");
-  if (!geral && !publicos && !anuncios) return;
+  const geral = sel("geral"), publicos = sel("publicos"), anuncios = sel("anuncios"), proximos = sel("proximos");
+  if (!geral && !publicos && !anuncios && !proximos) return;
+  const dropBox = (el) => { if (el) (el.closest(".rr-nextsteps") || el).remove(); };
   try {
     const raw = sec.raw || {};
     const pick = (arr) => (arr || []).map((a) => ({ name: a.name, ctr: a.ctr, results: a.results, cpr: a.cpr, spend: a.spend }));
@@ -2147,19 +2148,22 @@ async function fillReportAnalysis(sec, cName, monthLabel) {
       adsets: pick(raw.adsets), ads: pick(raw.ads),
     });
     const points = parseAnalysisPoints(txt);
-    const B = { geral: [], publicos: [], anuncios: [] };
-    points.forEach((pt) => { const t = pt.title.toLowerCase(); if (/p[úu]blico/.test(t)) B.publicos.push(pt); else if (/an[úu]ncio/.test(t)) B.anuncios.push(pt); else B.geral.push(pt); });
+    const B = { geral: [], publicos: [], anuncios: [], proximos: [] };
+    points.forEach((pt) => { const t = pt.title.toLowerCase(); if (/pr[óo]xim/.test(t)) B.proximos.push(pt); else if (/p[úu]blico/.test(t)) B.publicos.push(pt); else if (/an[úu]ncio/.test(t)) B.anuncios.push(pt); else B.geral.push(pt); });
     // se não veio nenhum título de nível, joga tudo no geral
-    const geralArr = B.geral.length || B.publicos.length || B.anuncios.length ? B.geral : points;
+    const geralArr = (B.geral.length || B.publicos.length || B.anuncios.length || B.proximos.length) ? B.geral : points;
     const put = (el, arr) => { if (!el) return; if (arr.length) { el.innerHTML = pointsToHtml(arr); el.contentEditable = "true"; } else el.remove(); };
     put(geral, geralArr); put(publicos, B.publicos); put(anuncios, B.anuncios);
+    // próximos passos: só o parágrafo (o título já vem do bloco), some a caixa se vazio
+    if (proximos) { if (B.proximos.length) { proximos.innerHTML = pointsToHtml(B.proximos.map((p) => ({ title: "", body: p.body }))); proximos.contentEditable = "true"; } else dropBox(proximos); }
   } catch (e) {
     if (geral) {
       geral.innerHTML = `<span class="rr-ph">⚠️ ${e.message} — <a href="#" class="rep-retry-an">tentar de novo</a></span>`;
       const a = geral.querySelector(".rep-retry-an");
-      if (a) a.addEventListener("click", (ev) => { ev.preventDefault(); geral.innerHTML = '<span class="rr-ph">⏳ gerando análise…</span>'; if (publicos) publicos.setAttribute("data-analysis", `${sec.platform}-publicos`); fillReportAnalysis(sec, cName, monthLabel); });
+      if (a) a.addEventListener("click", (ev) => { ev.preventDefault(); geral.innerHTML = '<span class="rr-ph">⏳ gerando análise…</span>'; fillReportAnalysis(sec, cName, monthLabel); });
     }
     [publicos, anuncios].forEach((el) => el && el.remove());
+    dropBox(proximos);
   }
 }
 

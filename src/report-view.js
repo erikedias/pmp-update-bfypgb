@@ -191,6 +191,7 @@
     (d.blocks || []).forEach((b) => {
       if (b.type === "title") inner += `<div class="rr-title">${esc(b.text)} ${q()}</div>`;
       else if (b.type === "table") inner += table(b);
+      else if (b.type === "proximos") inner += `<div class="rr-nextsteps"><div class="rr-ns-title">🎯 Próximos Passos</div><div class="rr-analysis" data-analysis="${esc(b.id)}"${opts.editable ? ' contenteditable="true"' : ""}><span class="rr-ph">⏳ definindo os próximos passos…</span></div></div>`;
       else if (b.type === "analysis" && b.id) inner += `<div class="rr-analysis" data-analysis="${esc(b.id)}"${opts.editable ? ' contenteditable="true"' : ""}><span class="rr-ph">⏳ gerando análise…</span></div>`;
       else if (b.type === "analysis") inner += analysisBlock(b.data, opts.editable);
     });

@@ -1,6 +1,6 @@
 {
-  "version": "1.3.5",
-  "notes": "Relatório mais personalizável: análise posicionada por nível (geral embaixo dos dados gerais, públicos embaixo da tabela de públicos, anúncios embaixo dos anúncios); botão 'Remover' para tirar uma plataforma do relatório (some do PDF também); plataforma sem veiculação no período (ex.: LinkedIn zerado) não aparece mais.",
+  "version": "1.3.6",
+  "notes": "Cada plataforma agora termina com um bloco 'Próximos Passos' — ações concretas para o próximo mês com base nos gargalos identificados (métricas abaixo do esperado, públicos e anúncios caros para realocar verba, criativos a testar ou pausar).",
   "files": [
     "src/app.js",
     "src/engine.js",

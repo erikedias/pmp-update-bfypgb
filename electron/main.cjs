@@ -756,6 +756,7 @@ function buildReportAnalysisPrompt(d) {
     `Percorra a jornada NA ORDEM das métricas abaixo — um "## " para cada — comparando com o período anterior (a variação já vem nos dados) e explicando causa e efeito entre elas.`,
     (d.adsets && d.adsets.length) ? `Depois da jornada, adicione "## Públicos" com um parágrafo destacando o público de melhor CPL e de melhor CTR, e os mais caros que devem ter a verba realocada.` : "",
     (d.ads && d.ads.length) ? `Depois, adicione "## Anúncios" com um parágrafo destacando os anúncios de melhor resultado e os que devem ser trocados.` : "",
+    `SEMPRE termine com "## Próximos Passos" e UM parágrafo com as ações concretas para o próximo mês que atacam os gargalos identificados neste mês (métricas que ficaram abaixo do esperado, públicos/anúncios caros para realocar verba, criativos a testar ou pausar, ajustes de segmentação/lance). Cite nomes e números específicos; nada genérico como "continuar otimizando".`,
     `REGRAS: já é a análise pronta — NÃO diga "vou analisar", NÃO diga "seguindo a jornada", NÃO explique seu método, NÃO repita estas instruções; comece direto no primeiro "## ". NÃO use traços, asteriscos, listas com marcador nem markdown — só "## " nos títulos e parágrafos normais. Use SOMENTE os dados abaixo; se algo for zero/ausente, comente com naturalidade sem inventar número. Tom profissional e claro, em português.`,
     `\nMÉTRICAS (jornada, na ordem):\n${kpiLines}`,
     adsetLines ? `\nPÚBLICOS (conjuntos de anúncio):\n${adsetLines}` : "",
@@ -2181,6 +2182,7 @@ async function metaReportSection(accountId, start, end, prevStart, prevEnd, name
       { type: "title", text: "Anúncios em Destaque" },
       { type: "table", cols: [{ label: "Anúncio", l: true }, { label: "Impressões" }, { label: "Alcance" }, { label: "CPM" }, { label: "CTR (Taxa de cliques no link)" }, { label: "Frequência" }, { label: "Resultados", sort: true }, { label: "Custo por resultados" }, { label: "Valor investido" }], rows: adRows.map(adTblRow) },
       { type: "analysis", id: "meta-anuncios" },
+      { type: "proximos", id: "meta-proximos" },
     ],
     raw: { totals: T, prev: P, campaigns: campRows, adsets: adsetRows, ads: adRows },
   };
@@ -2215,7 +2217,7 @@ async function googleReportSection(customerId, start, end, prevStart, prevEnd, n
   ];
   const rows = cur.map((r) => { const m = M(r.metrics || {}), top = Number((r.metrics || {}).searchTopImpressionShare || 0) * 100; return { name: (r.campaign && r.campaign.name) || "(campanha)", m, top }; }).sort((a, b) => b.m.clk - a.m.clk).slice(0, 20);
   const tbl = { type: "table", cols: [{ label: "Campanhas", l: true }, { label: "Impressões" }, { label: "Cliques", sort: true }, { label: "CTR (Taxa de Cliques)" }, { label: "CPC médio" }, { label: "Conversões" }, { label: "Custo por conversão" }, { label: "% de Anúncios na 1ª posição" }, { label: "Custo" }], rows: rows.map((x) => [{ v: x.name, l: true }, _en(x.m.impr), _en(x.m.clk), _pct(x.m.impr ? x.m.clk / x.m.impr * 100 : null), _brl(x.m.clk ? x.m.cost / x.m.clk : null), _en(x.m.conv), _brl(x.m.conv ? x.m.cost / x.m.conv : null), _pct(x.top), _brl(x.m.cost)]) };
-  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, blocks: [{ type: "analysis", id: "google-geral" }, { type: "title", text: "Todas as Campanhas" }, tbl], raw: { totals: T, prev: P } };
+  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, blocks: [{ type: "analysis", id: "google-geral" }, { type: "title", text: "Todas as Campanhas" }, tbl, { type: "proximos", id: "google-proximos" }], raw: { totals: T, prev: P } };
 }
 
 function linkedinReportSection(li, prev, name) {
@@ -2243,7 +2245,7 @@ function linkedinReportSection(li, prev, name) {
   ];
   const camps = (li.rows || []).filter((r) => r.level === "campaign");
   const tbl = { type: "table", cols: [{ label: "Campanha", l: true }, { label: "Envios" }, { label: "Aberturas" }, { label: "Cliques" }, { label: "Leads" }, { label: "CPL" }, { label: "Investido" }], rows: camps.map((r) => { const m = r.metrics || {}, sp = spendOf(m), ld = n(m.leads); return [{ v: r.name, l: true }, _en(n(m.sends)), _en(n(m.opens)), _en(n(m.clicks)), _en(ld), _brl(ld ? sp / ld : null), _brl(sp)]; }) };
-  return { platform: "linkedin", label: "LinkedIn Ads", subtitle: name || "", accent: "#0a66c2", topAccent: true, kpis, funnel, blocks: [{ type: "analysis", id: "linkedin-geral" }, { type: "title", text: "Campanhas" }, tbl], raw: { totals: t, prev: p } };
+  return { platform: "linkedin", label: "LinkedIn Ads", subtitle: name || "", accent: "#0a66c2", topAccent: true, kpis, funnel, blocks: [{ type: "analysis", id: "linkedin-geral" }, { type: "title", text: "Campanhas" }, tbl, { type: "proximos", id: "linkedin-proximos" }], raw: { totals: t, prev: p } };
 }
 
 // Seção Meta a partir do dado do Reportei (fallback quando não há conta Meta direta) — sem gráficos/thumbs
@@ -2279,6 +2281,7 @@ function metaLeanFromReportei(li, prev, name) {
   if (audRows.length) blocks.push({ type: "analysis", id: "meta-publicos" });
   const d = mkTbl("ad", "Anúncio"); if (d) blocks.push({ type: "title", text: "Anúncios em Destaque" }, d);
   if (adRows2.length) blocks.push({ type: "analysis", id: "meta-anuncios" });
+  blocks.push({ type: "proximos", id: "meta-proximos" });
   return { platform: "meta", label: "Meta Ads", subtitle: name || "", accent: "#1877f2", kpis, funnel, blocks, raw: { totals: { impr, reach, clk, leads, spend }, prev: { impr: P.impr, leads: P.leads, spend: P.spend }, adsets: audRows, ads: adRows2 } };
 }
 
@@ -2301,7 +2304,7 @@ function googleLeanFromReportei(li, prev, name) {
   ];
   const camps = (li.rows || []).filter((r) => r.level === "campaign");
   const tbl = { type: "table", cols: [{ label: "Campanhas", l: true }, { label: "Impressões" }, { label: "Cliques", sort: true }, { label: "CTR (Taxa de Cliques)" }, { label: "CPC médio" }, { label: "Conversões" }, { label: "Custo por conversão" }, { label: "Custo" }], rows: camps.map((r) => { const m = r.metrics || {}, i = n(m.impressions), c = n(m.clicks), cv = n(m.conversions), co = n(m.cost != null ? m.cost : m.spend); return [{ v: r.name, l: true }, _en(i), _en(c), _pct(i ? c / i * 100 : null), _brl((m.cpc != null && Number(m.cpc)) ? Number(m.cpc) : (c ? co / c : null)), _en(cv), _brl(cv ? co / cv : null), _brl(co)]; }) };
-  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, blocks: [{ type: "analysis", id: "google-geral" }, { type: "title", text: "Todas as Campanhas" }, tbl], raw: { totals: { impr, clk, conv, cost }, prev: P } };
+  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, blocks: [{ type: "analysis", id: "google-geral" }, { type: "title", text: "Todas as Campanhas" }, tbl, { type: "proximos", id: "google-proximos" }], raw: { totals: { impr, clk, conv, cost }, prev: P } };
 }
 
 ipcMain.handle("report:build", async (_e, { projectId, start, end, prevStart, prevEnd }) => {
