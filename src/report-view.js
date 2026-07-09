@@ -71,6 +71,54 @@
     return `<svg viewBox="0 0 ${W} ${H}" width="${W}" style="max-width:100%">${parts.join("")}</svg>`;
   }
 
+  /* ---------- funil HORIZONTAL (cards lado a lado + curva de fluxo, estilo Reportei) ---------- */
+  const isCurrency = (v) => /^\s*R\$/.test(String(v == null ? "" : v));
+  const parseNum = (v) => { const f = parseFloat(String(v == null ? "" : v).replace(/[^0-9.,]/g, "").replace(/,/g, "")); return isNaN(f) ? 0 : f; };
+  function smoothArea(pts, W, H) {
+    if (pts.length < 2) return "";
+    let d = `M ${pts[0][0]},${pts[0][1].toFixed(1)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], cx = (x0 + x1) / 2;
+      d += ` C ${cx.toFixed(1)},${y0.toFixed(1)} ${cx.toFixed(1)},${y1.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`;
+    }
+    const line = d;
+    const area = `${d} L ${W},${H} L 0,${H} Z`;
+    return { line, area };
+  }
+  function funnelHorizontal(steps) {
+    const n = steps.length;
+    if (!n) return "";
+    const nums = steps.map((s) => parseNum(s.value));
+    // altura da curva: normaliza pelos valores; etapas em R$ (moeda) começam no topo pra não distorcer o funil de contagens
+    const counts = steps.map((s, i) => (isCurrency(s.value) ? null : nums[i])).filter((v) => v != null);
+    const cmax = Math.max(...counts, 1);
+    const W = 1000, H = 132, top = 10;
+    const curveVal = steps.map((s, i) => (isCurrency(s.value) ? cmax : nums[i]));
+    const pts = [];
+    curveVal.forEach((v, i) => { const x = (i + 0.5) / n * W; const y = top + (1 - Math.min(1, v / cmax)) * (H - top - 6); pts.push([x, y]); });
+    pts.unshift([0, pts[0][1]]); pts.push([W, pts[pts.length - 1][1]]);
+    const { line, area } = smoothArea(pts, W, H);
+    const svg = `<svg class="rr-fn-curve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${area}" fill="var(--rr-fn-fill)"/><path d="${line}" fill="none" stroke="var(--rr-fn-line)" stroke-width="2.5"/></svg>`;
+    const cards = steps.map((s, i) => {
+      const prevStep = i > 0 ? steps[i - 1] : null;
+      const showRatio = prevStep && !isCurrency(prevStep.value) && !isCurrency(s.value) && nums[i - 1] > 0;
+      let ratio = showRatio ? parseFloat((nums[i] / nums[i - 1] * 100).toFixed(2)) : null;
+      // taxa > 100% = a etapa cresceu em vez de afunilar (caminhos paralelos, ex.: mensagem vs lead) → não é etapa real do funil
+      if (ratio != null && ratio > 100) ratio = null;
+      const delta = (s.prev != null && s.prev !== "") ? deltaHTML(nums[i], parseNum(s.prev)) : (s.dir ? `<span class="rr-delta ${s.dir === "up" ? "up" : s.dir === "down" ? "down" : "flat"}">${s.dir === "up" ? "▲" : s.dir === "down" ? "▼" : ""}</span>` : "");
+      return `<div class="rr-fcard">
+        <div class="rr-fc-top">
+          <div class="rr-fc-lbl">${esc(s.label)}</div>
+          <div class="rr-fc-val">${esc(s.value)}</div>
+          ${delta ? `<div class="rr-fc-delta">${delta}</div>` : ""}
+          ${(s.prev != null && s.prev !== "") ? `<div class="rr-fc-prev">${esc(s.prev)}<br>no período anterior</div>` : ""}
+        </div>
+        <div class="rr-fc-ratio">${ratio != null ? `<b>${ratio}%</b> de ${esc(prevStep.value)}` : ""}</div>
+      </div>`;
+    }).join("");
+    return `<div class="rr-funnel-h" style="--fn:${n}">${svg}<div class="rr-fn-cards">${cards}</div></div>`;
+  }
+
   // linha de dois eixos (CTR verde à esquerda, Cliques azul à direita)
   function lineSVG(labels, sA, sB) {
     const W = 560, H = 240, ml = 36, mr = 40, mt = 12, mb = 56, iw = W - ml - mr, ih = H - mt - mb;
@@ -186,7 +234,7 @@
       <span class="rr-clock">🕐</span>
       <button type="button" class="rr-remove" title="Remover esta plataforma do relatório">Remover ✕</button></div>`;
     inner += kpiGrid(d.kpis || []);
-    if (d.funnel) inner += `<div class="rr-title">Funil ${q()}</div><div class="rr-funnel">${funnelSVG(d.funnel)}</div>`;
+    if (d.funnel) inner += `<div class="rr-title">Funil ${q()}</div>${funnelHorizontal(d.funnel)}`;
     inner += chartsGrid(d.charts);
     (d.blocks || []).forEach((b) => {
       if (b.type === "title") inner += `<div class="rr-title">${esc(b.text)} ${q()}</div>`;
@@ -229,12 +277,12 @@
         { label: "Valor investido", kind: "brl", value: 17974.54, prev: 15573.13, big: true },
       ],
       funnel: [
-        { label: "Valor investido", value: "R$17,974.54", dir: "up" },
-        { label: "Impressões Totais", value: "836,174", dir: "down" },
-        { label: "Alcance Total", value: "308,940", dir: "down" },
-        { label: "Total de cliques no link", value: "6,728", dir: "up" },
-        { label: "Conversas iniciadas por mensagem", value: "22", dir: "up" },
-        { label: "Todos os cadastros (leads)", value: "357", dir: "down" },
+        { label: "Valor investido", value: "R$17,974.54", prev: "R$15,573.13", dir: "up" },
+        { label: "Impressões Totais", value: "836,174", prev: "843,005", dir: "down" },
+        { label: "Alcance Total", value: "308,940", prev: "332,762", dir: "down" },
+        { label: "Total de cliques no link", value: "6,728", prev: "5,564", dir: "up" },
+        { label: "Conversas iniciadas por mensagem", value: "22", prev: "18", dir: "up" },
+        { label: "Todos os cadastros (leads)", value: "357", prev: "375", dir: "down" },
       ],
       charts: {
         timeseries: { labels: days, ctr: wave(0.95, 0.28, 0), clicks: wave(230, 90, 1.5) },

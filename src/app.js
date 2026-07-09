@@ -1770,7 +1770,10 @@ function renderKwVol(list) {
         <option value="broad">Ampla</option>
       </select>
       <button class="btn btn-ghost" id="kwVolCopyBtn">📋 Copiar</button>
-    </div>`;
+      <button class="btn btn-primary" id="kwVolAdsBtn">✍️ Gerar títulos e descrições</button>
+    </div>
+    <p class="sub" style="margin-top:8px">Marque as palavras-chave que quer usar e gere títulos e descrições (RSA) coerentes com elas e com a página de destino (campo "Site do cliente" acima).</p>
+    <div id="kwVolAdsBody" style="margin-top:12px"></div>`;
   $("#kwVolCopyBtn").addEventListener("click", () => {
     const results = state.kwVolResults || [];
     const matchSel = $("#kwVolMatch");
@@ -1780,6 +1783,28 @@ function renderKwVol(list) {
     navigator.clipboard.writeText(fmt.join("\n"));
     const mLabel = { phrase: "frase", exact: "exata", broad: "ampla" }[(matchSel || {}).value || "phrase"];
     toast(`${fmt.length} palavra(s) copiada(s) em correspondência ${mLabel}.`);
+  });
+  $("#kwVolAdsBtn").addEventListener("click", async () => {
+    const results = state.kwVolResults || [];
+    let sel = [...$$(".kwvol-ck")].filter((c) => c.checked).map((c) => results[+c.dataset.i].termo);
+    if (!sel.length) sel = results.map((k) => k.termo);
+    if (!sel.length) { toast("Selecione ao menos uma palavra-chave.", true); return; }
+    const c = kwClient(); const prof = (c && c.profile) || {};
+    const btn = $("#kwVolAdsBtn"); const out = $("#kwVolAdsBody");
+    btn.disabled = true; btn.textContent = "Gerando…";
+    out.innerHTML = '<div class="state">⏳ Lendo a página de destino e escrevendo os anúncios coerentes com as palavras-chave…</div>';
+    try {
+      const txt = await window.api.gadsAdsFromKeywords({
+        keywords: sel, url: $("#kwUrl").value.trim(),
+        service: $("#kwService").value.trim() || prof.servico || prof.oQueFaz || "",
+        clientName: c ? c.name : "", persona: prof.personaDoc || "", oQueNaoFaz: prof.oQueNaoFaz || "",
+      });
+      out.dataset.raw = txt;
+      out.innerHTML = `<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px"><button class="chip-btn" id="kwVolAdsCopy">📋 Copiar</button><button class="chip-btn" id="kwVolAdsObs">💾 Salvar no Obsidian</button></div>` + mdToHtml(txt);
+      $("#kwVolAdsCopy").addEventListener("click", () => { navigator.clipboard.writeText(out.dataset.raw); toast("Anúncios copiados."); });
+      const ob = $("#kwVolAdsObs"); if (ob) ob.addEventListener("click", () => saveObsidian(kwClient(), "Anúncios Google (títulos e descrições)", out.dataset.raw, ob));
+    } catch (e) { out.innerHTML = `<div class="state error">❌ ${e.message}</div>`; }
+    btn.disabled = false; btn.textContent = "✍️ Gerar títulos e descrições";
   });
 }
 
@@ -2145,7 +2170,7 @@ async function fillReportAnalysis(sec, cName, monthLabel) {
     const txt = await window.api.reportAnalyze({
       clientName: cName, monthLabel, label: sec.label,
       kpis: (sec.kpis || []).map((k) => ({ label: k.label, value: k.value, prev: k.prev, kind: k.kind })),
-      adsets: pick(raw.adsets), ads: pick(raw.ads),
+      adsets: pick(raw.adsets), ads: pick(raw.ads), quali: sec.quali || null,
     });
     const points = parseAnalysisPoints(txt);
     const B = { geral: [], publicos: [], anuncios: [], proximos: [] };

@@ -1,6 +1,6 @@
 {
-  "version": "1.3.7",
-  "notes": "Corrige tabelas do relatório que cortavam colunas (ex: Resultados, Custo por resultado) sem deixar rolar — agora a tabela tem rolagem horizontal quando não cabe tudo, e no PDF o texto encolhe/quebra linha pra nenhuma coluna ficar escondida.",
+  "version": "1.3.8",
+  "notes": "Google Ads: novo gerador de títulos e descrições (RSA) a partir das palavras-chave selecionadas + leitura da página de destino, pra o anúncio ficar coerente com a busca e a LP. Relatório: análise agora inclui taxa de preenchimento (leads/cliques) e, quando o cliente tem planilha de leads, taxa de MQL/SQL (sem inventar quando não houver). Funil trocado para o estilo horizontal (cards lado a lado com curva de fluxo e taxa de conversão entre etapas).",
   "files": [
     "src/app.js",
     "src/engine.js",

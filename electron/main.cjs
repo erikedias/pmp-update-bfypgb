@@ -750,15 +750,25 @@ function buildReportAnalysisPrompt(d) {
   const listLine = (a) => `${a.name}: CTR ${a.ctr != null ? parseFloat(Number(a.ctr).toFixed(2)) + "%" : "sem dado"}, resultados ${a.results != null ? a.results : "sem dado"}, custo por resultado ${a.cpr != null ? "R$ " + Number(a.cpr).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "sem dado"}, investido R$ ${Number(a.spend || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
   const adsetLines = (d.adsets || []).map(listLine).join("\n");
   const adLines = (d.ads || []).map(listLine).join("\n");
+  const q = d.quali || {};
+  const qualiLines = (() => {
+    const L = [];
+    if (q.fillRate != null) L.push(`Taxa de preenchimento (leads ÷ cliques no link): ${parseFloat(Number(q.fillRate).toFixed(2))}%`);
+    if (q.mqlRate != null) L.push(`Taxa de MQL: ${parseFloat(Number(q.mqlRate).toFixed(1))}% (${q.mqls} MQL de ${q.leadsTotal} leads, pela planilha de qualificação do cliente)`);
+    if (q.sqlRate != null) L.push(`Taxa de SQL: ${parseFloat(Number(q.sqlRate).toFixed(1))}% (${q.sqls} reuniões/oportunidades)`);
+    return L.join("\n");
+  })();
   return [
     `Você é analista de mídia paga. Escreva a análise da plataforma ${d.label} do relatório mensal do cliente "${d.clientName}" (${d.monthLabel}). Este texto vai DIRETO para o cliente — já é a análise final.`,
     `FORMATO OBRIGATÓRIO: ponto a ponto. Cada ponto começa com "## " seguido do título (o nome da métrica ou do bloco); na LINHA SEGUINTE, um parágrafo corrido analisando só aquele ponto. Deixe uma linha em branco entre os pontos.`,
     `Percorra a jornada NA ORDEM das métricas abaixo — um "## " para cada — comparando com o período anterior (a variação já vem nos dados) e explicando causa e efeito entre elas.`,
+    qualiLines ? `Depois das métricas de mídia e ANTES dos públicos, percorra a QUALIFICAÇÃO abaixo — um "## " para cada taxa listada (ex.: "## Taxa de preenchimento", "## Taxa de MQL") — analisando a qualidade dos leads: se a taxa de preenchimento indica atrito no formulário/LP, e se a taxa de MQL mostra que os leads estão dentro (ou fora) do perfil ideal.` : "",
     (d.adsets && d.adsets.length) ? `Depois da jornada, adicione "## Públicos" com um parágrafo destacando o público de melhor CPL e de melhor CTR, e os mais caros que devem ter a verba realocada.` : "",
     (d.ads && d.ads.length) ? `Depois, adicione "## Anúncios" com um parágrafo destacando os anúncios de melhor resultado e os que devem ser trocados.` : "",
     `SEMPRE termine com "## Próximos Passos" e UM parágrafo com as ações concretas para o próximo mês que atacam os gargalos identificados neste mês (métricas que ficaram abaixo do esperado, públicos/anúncios caros para realocar verba, criativos a testar ou pausar, ajustes de segmentação/lance). Cite nomes e números específicos; nada genérico como "continuar otimizando".`,
     `REGRAS: já é a análise pronta — NÃO diga "vou analisar", NÃO diga "seguindo a jornada", NÃO explique seu método, NÃO repita estas instruções; comece direto no primeiro "## ". NÃO use traços, asteriscos, listas com marcador nem markdown — só "## " nos títulos e parágrafos normais. Use SOMENTE os dados abaixo; se algo for zero/ausente, comente com naturalidade sem inventar número. Tom profissional e claro, em português.`,
     `\nMÉTRICAS (jornada, na ordem):\n${kpiLines}`,
+    qualiLines ? `\nQUALIFICAÇÃO (analise cada uma; NÃO invente número — só o que está aqui):\n${qualiLines}` : "",
     adsetLines ? `\nPÚBLICOS (conjuntos de anúncio):\n${adsetLines}` : "",
     adLines ? `\nANÚNCIOS:\n${adLines}` : "",
   ].filter(Boolean).join("\n");
@@ -1656,6 +1666,34 @@ const ANUNCIOS_PROMPT = `Você é especialista em Google Ads (Search) com foco e
 **Extensões**: 4 sitelinks (título + descrição), 6 callouts, 1 snippet estruturado.
 Inclua a palavra-chave nos 3 primeiros títulos. Respeite os limites. Português. Sem markdown de título com #.`;
 
+const ADS_FROM_KW_PROMPT = `Você é especialista em Google Ads (Rede de Pesquisa) com foco em Índice de Qualidade, CTR e conversão. Crie anúncios responsivos (RSA) COERENTES com as PALAVRAS-CHAVE SELECIONADAS e com a PÁGINA DE DESTINO informada — a mensagem do anúncio precisa ter continuidade com o que a pessoa vê ao clicar (mesma oferta, mesmo serviço, mesma linguagem). Entregue:
+TÍTULOS (15 — máx 30 caracteres cada): ao menos 6 usando as palavras-chave principais (ou uma variação bem próxima) para casar com a busca, 3 de benefício/resultado, 2 de oferta/diferencial, 2 de prova social/autoridade, 2 de CTA. Mostre o texto e a contagem de caracteres de cada um.
+DESCRIÇÕES (4 — máx 90 caracteres cada): 2 de benefícios/diferenciais que aparecem na página, 1 de oferta/diferencial, 1 de CTA. Com a contagem de caracteres.
+CAMINHOS DE EXIBIÇÃO (2 — máx 15 caracteres cada), coerentes com a página.
+Não prometa nada que a página de destino não entrega. Português. Respeite os limites do RSA. Sem markdown de título com #.`;
+
+ipcMain.handle("gads:adsFromKeywords", async (_e, { keywords, url, service, clientName, persona, oQueNaoFaz }) => {
+  const s = readStore().settings;
+  const kws = (keywords || []).map((k) => String(k).trim()).filter(Boolean).slice(0, 30);
+  if (!kws.length) throw new Error("Selecione ao menos uma palavra-chave.");
+  let pageTxt = "";
+  if (url) {
+    try {
+      const u = /^https?:\/\//.test(url) ? url : "https://" + url;
+      const html = await fetch(u, { headers: { "User-Agent": "Mozilla/5.0" } }).then((r) => r.text());
+      pageTxt = html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/gi, " ").replace(/\s+/g, " ").trim().slice(0, 7000);
+    } catch {}
+  }
+  const personaCtx = persona ? `\n\n== PERSONA (base pra tom e argumentos) ==\n${String(persona).slice(0, 4000)}` : "";
+  const prompt = [
+    ADS_FROM_KW_PROMPT, "\n" + GADS_POLICY,
+    `\n== PALAVRAS-CHAVE SELECIONADAS (base dos títulos — use-as e variações próximas) ==\n${kws.join(", ")}`,
+    `\n== PÁGINA DE DESTINO (${url || "sem URL"}) — o anúncio precisa ser coerente com ela ==\n${pageTxt || "(não consegui ler a página — use as palavras-chave e o serviço abaixo)"}`,
+    `\n== CONTEXTO DO CLIENTE ==\nCliente: ${clientName || ""}\nServiço: ${service || "(ver página)"}${oQueNaoFaz ? "\nNÃO faz: " + oQueNaoFaz : ""}${personaCtx}`,
+  ].join("\n");
+  return await aiAnalyze(s, prompt);
+});
+
 ipcMain.handle("gads:plan", async (_e, { modulo, url, service, oQueNaoFaz, clientName, persona }) => {
   const s = readStore().settings;
   let pageTxt = "";
@@ -2146,12 +2184,12 @@ async function metaReportSection(accountId, start, end, prevStart, prevEnd, name
     { label: "Valor investido", kind: "brl", value: T.spend, prev: P.spend, big: true },
   ];
   const funnel = [
-    { label: "Valor investido", value: _brl(T.spend), dir: _dir(T.spend, P.spend) },
-    { label: "Impressões Totais", value: _en(T.impr), dir: _dir(T.impr, P.impr) },
-    { label: "Alcance Total", value: _en(T.reach), dir: _dir(T.reach, P.reach) },
-    { label: "Total de cliques no link", value: _en(T.clk), dir: _dir(T.clk, P.clk) },
-    { label: "Conversas iniciadas por mensagem", value: _en(T.msg), dir: _dir(T.msg, P.msg) },
-    { label: "Todos os cadastros (leads)", value: _en(T.leads), dir: _dir(T.leads, P.leads) },
+    { label: "Valor investido", value: _brl(T.spend), prev: _brl(P.spend), dir: _dir(T.spend, P.spend) },
+    { label: "Impressões Totais", value: _en(T.impr), prev: _en(P.impr), dir: _dir(T.impr, P.impr) },
+    { label: "Alcance Total", value: _en(T.reach), prev: _en(P.reach), dir: _dir(T.reach, P.reach) },
+    { label: "Total de cliques no link", value: _en(T.clk), prev: _en(P.clk), dir: _dir(T.clk, P.clk) },
+    { label: "Conversas iniciadas por mensagem", value: _en(T.msg), prev: _en(P.msg), dir: _dir(T.msg, P.msg) },
+    { label: "Todos os cadastros (leads)", value: _en(T.leads), prev: _en(P.leads), dir: _dir(T.leads, P.leads) },
   ];
   const rowFrom = (r, nameKey) => { const results = metaLeadsTotal(r.actions), label = metaLeadInfo(r.actions).label, spend = n(r.spend), impr = n(r.impressions), reach = n(r.reach); return { name: r[nameKey] || "(sem nome)", impr, reach, cpm: impr ? spend / impr * 1000 : null, ctr: r.inline_link_click_ctr != null ? Number(r.inline_link_click_ctr) : (impr ? n(r.inline_link_clicks) / impr * 100 : null), freq: r.frequency != null ? Number(r.frequency) : (reach ? impr / reach : null), results, label, cpr: results ? spend / results : null, spend }; };
   const tblRow = (x) => [{ v: x.name, l: true }, _en(x.impr), _en(x.reach), _brl(x.cpm), _pct(x.ctr), { v: String(x.results), sub: x.label }, { v: _brl(x.cpr), sub: x.label }, _brl(x.spend)];
@@ -2237,11 +2275,11 @@ function linkedinReportSection(li, prev, name) {
     { label: "Valor investido", kind: "brl", value: spend, prev: pspend, big: true },
   ];
   const funnel = [
-    { label: "Valor investido", value: _brl(spend), dir: _dir(spend, pspend) },
-    { label: "Envios", value: _en(sends), dir: _dir(sends, ps) },
-    { label: "Aberturas", value: _en(opens), dir: _dir(opens, po) },
-    { label: "Cliques", value: _en(clicks), dir: _dir(clicks, pc) },
-    { label: "Leads", value: _en(leads), dir: _dir(leads, pl) },
+    { label: "Valor investido", value: _brl(spend), prev: _brl(pspend), dir: _dir(spend, pspend) },
+    { label: "Envios", value: _en(sends), prev: _en(ps), dir: _dir(sends, ps) },
+    { label: "Aberturas", value: _en(opens), prev: _en(po), dir: _dir(opens, po) },
+    { label: "Cliques", value: _en(clicks), prev: _en(pc), dir: _dir(clicks, pc) },
+    { label: "Leads", value: _en(leads), prev: _en(pl), dir: _dir(leads, pl) },
   ];
   const camps = (li.rows || []).filter((r) => r.level === "campaign");
   const tbl = { type: "table", cols: [{ label: "Campanha", l: true }, { label: "Envios" }, { label: "Aberturas" }, { label: "Cliques" }, { label: "Leads" }, { label: "CPL" }, { label: "Investido" }], rows: camps.map((r) => { const m = r.metrics || {}, sp = spendOf(m), ld = n(m.leads); return [{ v: r.name, l: true }, _en(n(m.sends)), _en(n(m.opens)), _en(n(m.clicks)), _en(ld), _brl(ld ? sp / ld : null), _brl(sp)]; }) };
@@ -2266,11 +2304,11 @@ function metaLeanFromReportei(li, prev, name) {
     { label: "Valor investido", kind: "brl", value: spend, prev: P.spend, big: true },
   ];
   const funnel = [
-    { label: "Valor investido", value: _brl(spend), dir: _dir(spend, P.spend) },
-    { label: "Impressões Totais", value: _en(impr), dir: _dir(impr, P.impr) },
-    { label: "Alcance Total", value: _en(reach), dir: _dir(reach, P.reach) },
-    { label: "Cliques", value: _en(clk), dir: _dir(clk, P.clk) },
-    { label: "Todos os cadastros (leads)", value: _en(leads), dir: _dir(leads, P.leads) },
+    { label: "Valor investido", value: _brl(spend), prev: _brl(P.spend), dir: _dir(spend, P.spend) },
+    { label: "Impressões Totais", value: _en(impr), prev: _en(P.impr), dir: _dir(impr, P.impr) },
+    { label: "Alcance Total", value: _en(reach), prev: _en(P.reach), dir: _dir(reach, P.reach) },
+    { label: "Cliques", value: _en(clk), prev: _en(P.clk), dir: _dir(clk, P.clk) },
+    { label: "Todos os cadastros (leads)", value: _en(leads), prev: _en(P.leads), dir: _dir(leads, P.leads) },
   ];
   const mkTbl = (lvl, label) => { const rows = (li.rows || []).filter((r) => r.level === lvl); if (!rows.length) return null; return { type: "table", cols: [{ label, l: true }, { label: "Impressões" }, { label: "Alcance" }, { label: "CPM" }, { label: "CTR" }, { label: "Leads", sort: true }, { label: "CPL" }, { label: "Investido" }], rows: rows.map((r) => { const m = r.metrics || {}, sp = n(m.spend), i = n(m.impressions), ld = n(m.leads); return [{ v: r.name, l: true }, _en(i), _en(n(m.reach)), _brl(i ? sp / i * 1000 : null), _pct(m.ctr != null ? Number(m.ctr) : (i ? n(m.clicks) / i * 100 : null)), { v: String(ld) }, _brl(ld ? sp / ld : null), _brl(sp)]; }) }; };
   const rowsOf = (lvl) => (li.rows || []).filter((r) => r.level === lvl).map((r) => { const m = r.metrics || {}, i = n(m.impressions), c = n(m.clicks), ld = n(m.leads), sp = n(m.spend); return { name: r.name, ctr: m.ctr != null ? Number(m.ctr) : (i ? c / i * 100 : null), results: ld, cpr: ld ? sp / ld : null, spend: sp }; });
@@ -2333,6 +2371,20 @@ ipcMain.handle("report:build", async (_e, { projectId, start, end, prevStart, pr
   { const li = rp(repCur, "linkedin"); if (li) sections.push(linkedinReportSection(li, rp(repPrev, "linkedin"), cname)); }
   // esconde plataforma sem veiculação no período (ex.: LinkedIn zerado) — evita seção vazia no relatório
   const withData = sections.filter((s) => (s.kpis || []).some((k) => Number(k.value) > 0));
+  // QUALIFICAÇÃO: taxa de preenchimento (leads ÷ cliques) sempre; MQL/SQL só quando o cliente tem planilha de leads configurada
+  let leadsQ = null;
+  if (client && client.leads && client.leads.sheetUrl) { try { leadsQ = await leadsSummary(client.leads, start, end); } catch (e) { notes.push("Leads (MQL): " + (e.message || e)); } }
+  withData.forEach((sec) => {
+    const kget = (re) => { const k = (sec.kpis || []).find((x) => re.test(x.label)); return k && k.value != null ? Number(k.value) : null; };
+    const q = {};
+    if (sec.platform === "meta" || sec.platform === "linkedin") {
+      const clk = kget(/clique/i), ld = kget(/cadastro|leads/i);
+      if (clk > 0 && ld > 0) q.fillRate = ld / clk * 100;
+    }
+    const lp = leadsQ && leadsQ.byPlatform && leadsQ.byPlatform[sec.platform];
+    if (lp && lp.total > 0) { q.mqls = lp.mqls; q.mqlRate = lp.mqlRate; q.leadsTotal = lp.total; if (leadsQ.hasSql) { q.sqls = lp.sqls; q.sqlRate = lp.sqlRate; } }
+    if (Object.keys(q).length) sec.quali = q;
+  });
   return { sections: withData, notes };
 });
 

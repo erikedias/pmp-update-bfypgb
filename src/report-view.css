@@ -66,8 +66,22 @@
 .rr-title { text-align: center; font-size: 15px; font-weight: 800; color: var(--rr-ink-2); margin: 34px 0 18px; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .rr-title .k-q { width: 15px; height: 15px; border-radius: 50%; background: #eef1f5; color: #9aa4b2; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
 
-/* -------- funil -------- */
+/* -------- funil (vertical, legado) -------- */
 .rr-funnel { display: flex; justify-content: center; margin: 6px 0 30px; }
+
+/* -------- funil HORIZONTAL (cards + curva de fluxo, estilo Reportei) -------- */
+.rr-funnel-h { --rr-fn-fill: #eef1f7; --rr-fn-line: #9aa7bd; position: relative; margin: 6px 0 30px; border: 1px solid var(--rr-card-line); border-radius: 12px; overflow: hidden; }
+.rr-fn-curve { position: absolute; left: 0; right: 0; bottom: 34px; width: 100%; height: 132px; z-index: 0; }
+.rr-fn-cards { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(var(--fn), 1fr); }
+.rr-fcard { padding: 16px 14px 12px; border-right: 1px solid var(--rr-line); display: flex; flex-direction: column; min-height: 232px; }
+.rr-fcard:last-child { border-right: 0; }
+.rr-fc-top { text-align: left; }
+.rr-fc-lbl { font-size: 12.5px; font-weight: 700; color: var(--rr-ink-2); line-height: 1.25; min-height: 2.4em; }
+.rr-fc-val { font-size: 21px; font-weight: 800; letter-spacing: -.02em; color: var(--rr-ink); margin-top: 6px; }
+.rr-fc-delta { margin-top: 7px; }
+.rr-fc-prev { font-size: 11px; color: var(--rr-muted); margin-top: 8px; line-height: 1.3; }
+.rr-fc-ratio { margin-top: auto; font-size: 12px; color: var(--rr-muted); padding-top: 10px; }
+.rr-fc-ratio b { color: var(--rr-ink-2); font-weight: 800; }
 
 /* -------- gráficos -------- */
 .rr-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 26px 34px; margin: 8px 0 20px; }
@@ -114,7 +128,8 @@ table.rr-tbl .r-sub { display: block; font-size: 11px; color: var(--rr-muted); f
 @media print {
   .rr-page { max-width: none; padding: 0 24px; }
   .rr-section { break-inside: avoid-page; }
-  .rr-charts, .rr-tbl-wrap, .rr-funnel { break-inside: avoid; }
+  .rr-charts, .rr-tbl-wrap, .rr-funnel, .rr-funnel-h { break-inside: avoid; }
+  .rr-fcard { min-height: 200px; }
   .rr-remove, .rr-clock { display: none !important; }
   /* no PDF não tem como rolar — encolhe e permite quebra de linha pra nenhuma coluna ficar de fora */
   .rr-tbl-wrap { overflow: visible; }
