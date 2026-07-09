@@ -127,8 +127,13 @@ table.rr-tbl .r-sub { display: block; font-size: 11px; color: var(--rr-muted); f
 
 @media print {
   .rr-page { max-width: none; padding: 0 24px; }
-  .rr-section { break-inside: avoid-page; }
-  .rr-charts, .rr-tbl-wrap, .rr-funnel, .rr-funnel-h { break-inside: avoid; }
+  /* seções longas fluem entre páginas; só elementos individuais ficam inteiros (evita buraco branco) */
+  .rr-section { break-inside: auto; }
+  .rr-section + .rr-section { break-before: page; }
+  .rr-charts, .rr-tbl-wrap { break-inside: auto; }
+  .rr-funnel-h, .rr-chart, .rr-nextsteps, .rr-kpis { break-inside: avoid; }
+  table.rr-tbl tr { break-inside: avoid; }
+  .rr-head, .rr-title { break-after: avoid; }
   .rr-fcard { min-height: 200px; }
   .rr-remove, .rr-clock { display: none !important; }
   /* no PDF não tem como rolar — encolhe e permite quebra de linha pra nenhuma coluna ficar de fora */

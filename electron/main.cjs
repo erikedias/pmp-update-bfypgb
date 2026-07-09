@@ -2527,7 +2527,14 @@ ipcMain.handle("report:exportPdf", async (_e, { html, title }) => {
     .rr-ad-name{gap:7px!important;min-width:0}
     .rr-ad-name span{min-width:0;word-break:break-word;overflow-wrap:anywhere}
     .rr-thumb{width:30px!important;height:30px!important;flex-basis:30px!important}
-    .rr-section,.rr-charts,.rr-tbl-wrap,.rr-funnel,.rr-funnel-h{break-inside:avoid}
+    /* quebra de página: seções longas FLUEM entre páginas (senão sobra buraco branco);
+       só mantém inteiros os elementos que não devem ser cortados no meio */
+    .rr-section{break-inside:auto!important}
+    .rr-section + .rr-section{break-before:page!important}
+    .rr-charts,.rr-tbl-wrap{break-inside:auto!important}
+    .rr-funnel-h,.rr-chart,.rr-nextsteps,.rr-kpis{break-inside:avoid!important}
+    table.rr-tbl tr{break-inside:avoid!important}
+    .rr-head,.rr-title{break-after:avoid!important}
     .rr-fcard{min-height:190px}
     /* KPIs no PDF: MESMO tamanho pra todos, compactos e bem distribuídos (estilo Reportei) */
     .k-q{display:none!important}
