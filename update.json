@@ -1,6 +1,6 @@
 {
-  "version": "1.3.11",
-  "notes": "Funil do Meta agora monta a etapa final com base no OBJETIVO das campanhas da conta (leads, mensagem, vendas ou tráfego), na ordem da jornada — antes mostrava 'Conversas iniciadas por mensagem' fixo mesmo quando não era o objetivo (ex.: Piticas é conta de leads). Desfecho que não é objetivo da conta não aparece mais; a taxa de conversão fica entre as etapas certas.",
+  "version": "1.3.12",
+  "notes": "PDF do relatório: as tabelas largas (ex.: Anúncios em Destaque, com 9 colunas) agora cabem 100% na largura da página — todas as colunas aparecem sem precisar arrastar pro lado. Regras aplicadas direto no PDF (não dependem do modo de impressão), com a coluna de nome mais larga, números sem quebrar no meio e miniaturas menores.",
   "files": [
     "src/app.js",
     "src/engine.js",

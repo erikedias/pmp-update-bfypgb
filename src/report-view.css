@@ -133,8 +133,13 @@ table.rr-tbl .r-sub { display: block; font-size: 11px; color: var(--rr-muted); f
   .rr-remove, .rr-clock { display: none !important; }
   /* no PDF não tem como rolar — encolhe e permite quebra de linha pra nenhuma coluna ficar de fora */
   .rr-tbl-wrap { overflow: visible; }
-  table.rr-tbl { width: 100%; table-layout: fixed; font-size: 10.5px; }
-  table.rr-tbl thead th { padding: 8px 6px; white-space: normal; word-break: break-word; }
-  table.rr-tbl tbody td { padding: 8px 6px; white-space: normal; word-break: break-word; }
-  .rr-thumb { width: 32px; height: 32px; flex-basis: 32px; }
+  table.rr-tbl { width: 100%; table-layout: fixed; font-size: 10px; }
+  table.rr-tbl th:first-child, table.rr-tbl td:first-child { width: 22%; }
+  table.rr-tbl thead th { padding: 7px 5px; white-space: normal; word-break: normal; overflow-wrap: break-word; hyphens: none; }
+  table.rr-tbl tbody td { padding: 7px 5px; white-space: nowrap; }
+  table.rr-tbl tbody td.l { white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
+  table.rr-tbl .r-sub { white-space: normal; }
+  .rr-ad-name { gap: 7px; min-width: 0; }
+  .rr-ad-name span { min-width: 0; word-break: break-word; overflow-wrap: anywhere; }
+  .rr-thumb { width: 30px; height: 30px; flex-basis: 30px; }
 }

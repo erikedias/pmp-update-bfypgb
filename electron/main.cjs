@@ -2510,7 +2510,27 @@ ipcMain.handle("report:build", async (_e, { projectId, start, end, prevStart, pr
 ipcMain.handle("report:exportPdf", async (_e, { html, title }) => {
   let css = "";
   try { css = fs.readFileSync(path.join(__dirname, "..", "src", "report-view.css"), "utf8"); } catch {}
-  const doc = `<!doctype html><html><head><meta charset="utf-8"><style>${css}\n@page{size:A4;margin:12mm}body{margin:0}.rr-page{max-width:none;padding:0}</style></head><body class="rr-doc">${html}</body></html>`;
+  // regras aplicadas SEMPRE no PDF (fora do @media print, porque o printToPDF nem sempre emula print):
+  // toda tabela cabe 100% na largura da página, sem rolagem — colunas encolhem e o texto quebra
+  const fitCss = `
+    @page{size:A4;margin:12mm}
+    body{margin:0}
+    .rr-page{max-width:none;padding:0}
+    .rr-remove,.rr-clock{display:none!important}
+    .rr-tbl-wrap{overflow:visible!important}
+    table.rr-tbl{width:100%!important;table-layout:fixed!important;font-size:10px!important}
+    table.rr-tbl th:first-child,table.rr-tbl td:first-child{width:22%!important}
+    table.rr-tbl thead th{padding:7px 5px!important;white-space:normal!important;word-break:normal!important;overflow-wrap:break-word!important;hyphens:none!important}
+    table.rr-tbl tbody td{padding:7px 5px!important;white-space:nowrap!important}
+    table.rr-tbl tbody td.l{white-space:normal!important;word-break:break-word!important;overflow-wrap:anywhere!important}
+    table.rr-tbl .r-sub{white-space:normal!important}
+    .rr-ad-name{gap:7px!important;min-width:0}
+    .rr-ad-name span{min-width:0;word-break:break-word;overflow-wrap:anywhere}
+    .rr-thumb{width:30px!important;height:30px!important;flex-basis:30px!important}
+    .rr-section,.rr-charts,.rr-tbl-wrap,.rr-funnel,.rr-funnel-h{break-inside:avoid}
+    .rr-fcard{min-height:190px}
+  `;
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><style>${css}\n${fitCss}</style></head><body class="rr-doc">${html}</body></html>`;
   const tmp = path.join(app.getPath("temp"), `rep-${Date.now()}.html`);
   fs.writeFileSync(tmp, doc, "utf8");
   const win = new BrowserWindow({ show: false, webPreferences: { offscreen: false } });
