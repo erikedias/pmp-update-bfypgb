@@ -1946,6 +1946,14 @@ function claudeAvailable() {
 // roda o Claude Code em modo silencioso (-p), prompt via stdin, modelo Sonnet por padrão (mais barato).
 // IMPORTANTE: quando o app é aberto pelo Finder o ambiente é mínimo e faltam USER/LOGNAME/HOME —
 // sem eles o Claude não acha o login no Keychain ("Not logged in"). Garantimos essas variáveis aqui.
+// remove qualquer preâmbulo de recomendação de modelo que o Claude Code injeta seguindo o CLAUDE.md global
+// (ex.: "💡 Modelo: essa tarefa é média — Sonnet ...") — NÃO pode aparecer no relatório do cliente
+function stripModelNote(t) {
+  return String(t || "")
+    .replace(/^[ \t>]*💡[ \t]*Modelo:[^\n]*(?:\r?\n)?/gim, "")
+    .replace(/^[ \t>]*Modelo:[^\n]*(?:Haiku|Sonnet|Opus)[^\n]*(?:\r?\n)?/gim, "")
+    .replace(/^\s+/, "");
+}
 function runClaudeCli(prompt, model) {
   return new Promise((resolve, reject) => {
     const bin = claudeBinary();
@@ -1966,8 +1974,8 @@ function runClaudeCli(prompt, model) {
     child.on("error", (e) => { clearTimeout(timer); reject(e); });
     child.on("close", (code) => {
       clearTimeout(timer);
-      const txt = out.trim();
-      if (/not logged in|please run \/login|invalid api key/i.test(txt + " " + err)) {
+      const txt = stripModelNote(out.trim());
+      if (/not logged in|please run \/login|invalid api key/i.test(out + " " + err)) {
         return reject(new Error("Claude Code não está logado nesta máquina."));
       }
       if (txt) resolve(txt);
@@ -2396,7 +2404,10 @@ async function googleReportSection(customerId, start, end, prevStart, prevEnd, n
   ];
   const rows = cur.map((r) => { const m = M(r.metrics || {}), top = Number((r.metrics || {}).searchTopImpressionShare || 0) * 100; return { name: (r.campaign && r.campaign.name) || "(campanha)", m, top }; }).sort((a, b) => b.m.clk - a.m.clk).slice(0, 20);
   const tbl = { type: "table", cols: [{ label: "Campanhas", l: true }, { label: "Impressões" }, { label: "Cliques", sort: true }, { label: "CTR (Taxa de Cliques)" }, { label: "CPC médio" }, { label: "Conversões" }, { label: "Custo por conversão" }, { label: "% de Anúncios na 1ª posição" }, { label: "Custo" }], rows: rows.map((x) => [{ v: x.name, l: true }, _en(x.m.impr), _en(x.m.clk), _pct(x.m.impr ? x.m.clk / x.m.impr * 100 : null), _brl(x.m.clk ? x.m.cost / x.m.clk : null), _en(x.m.conv), _brl(x.m.conv ? x.m.cost / x.m.conv : null), _pct(x.top), _brl(x.m.cost)]) };
-  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, blocks: [{ type: "analysis", id: "google-geral" }, { type: "title", text: "Todas as Campanhas" }, tbl, { type: "proximos", id: "google-proximos" }], raw: { totals: T, prev: P } };
+  const extraMetrics = [];
+  if (T.vv > 0) extraMetrics.push({ label: "Custo por visualização", kind: "brl", value: T.vv ? T.cost / T.vv : null, prev: P.vv ? P.cost / P.vv : null });
+  if (T.vv > 0) extraMetrics.push({ label: "Taxa de visualização", kind: "pct", value: T.impr ? T.vv / T.impr * 100 : null, prev: P.impr ? P.vv / P.impr * 100 : null });
+  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, extraMetrics, blocks: [{ type: "analysis", id: "google-geral" }, { type: "title", text: "Todas as Campanhas" }, tbl, { type: "proximos", id: "google-proximos" }], raw: { totals: T, prev: P } };
 }
 
 function linkedinReportSection(li, prev, name) {
@@ -2424,7 +2435,11 @@ function linkedinReportSection(li, prev, name) {
   ];
   const camps = (li.rows || []).filter((r) => r.level === "campaign");
   const tbl = { type: "table", cols: [{ label: "Campanha", l: true }, { label: "Envios" }, { label: "Aberturas" }, { label: "Cliques" }, { label: "Leads" }, { label: "CPL" }, { label: "Investido" }], rows: camps.map((r) => { const m = r.metrics || {}, sp = spendOf(m), ld = n(m.leads); return [{ v: r.name, l: true }, _en(n(m.sends)), _en(n(m.opens)), _en(n(m.clicks)), _en(ld), _brl(ld ? sp / ld : null), _brl(sp)]; }) };
-  return { platform: "linkedin", label: "LinkedIn Ads", subtitle: name || "", accent: "#0a66c2", topAccent: true, kpis, funnel, blocks: [{ type: "analysis", id: "linkedin-geral" }, { type: "title", text: "Campanhas" }, tbl, { type: "proximos", id: "linkedin-proximos" }], raw: { totals: t, prev: p } };
+  const extraMetrics = [];
+  if (clicks > 0) extraMetrics.push({ label: "CPC médio", kind: "brl", value: spend / clicks, prev: pc ? pspend / pc : null });
+  if (clicks > 0 && leads > 0) extraMetrics.push({ label: "Taxa de preenchimento", kind: "pct", value: rate(leads, clicks), prev: rate(pl, pc) });
+  if (opens > 0) extraMetrics.push({ label: "Custo por abertura", kind: "brl", value: spend / opens, prev: po ? pspend / po : null });
+  return { platform: "linkedin", label: "LinkedIn Ads", subtitle: name || "", accent: "#0a66c2", topAccent: true, kpis, funnel, extraMetrics, blocks: [{ type: "analysis", id: "linkedin-geral" }, { type: "title", text: "Campanhas" }, tbl, { type: "proximos", id: "linkedin-proximos" }], raw: { totals: t, prev: p } };
 }
 
 // Seção Meta a partir do dado do Reportei (fallback quando não há conta Meta direta) — sem gráficos/thumbs
@@ -2461,7 +2476,10 @@ function metaLeanFromReportei(li, prev, name) {
   const d = mkTbl("ad", "Anúncio"); if (d) blocks.push({ type: "title", text: "Anúncios em Destaque" }, d);
   if (adRows2.length) blocks.push({ type: "analysis", id: "meta-anuncios" });
   blocks.push({ type: "proximos", id: "meta-proximos" });
-  return { platform: "meta", label: "Meta Ads", subtitle: name || "", accent: "#1877f2", kpis, funnel, blocks, raw: { totals: { impr, reach, clk, leads, spend }, prev: { impr: P.impr, leads: P.leads, spend: P.spend }, adsets: audRows, ads: adRows2 } };
+  const extraMetrics = [];
+  if (clk > 0 && leads > 0) extraMetrics.push({ label: "Taxa de preenchimento", kind: "pct", value: clk ? leads / clk * 100 : null, prev: P.clk ? P.leads / P.clk * 100 : null });
+  if (reach > 0) extraMetrics.push({ label: "Frequência", kind: "num2", value: reach ? impr / reach : null, prev: P.reach ? P.impr / P.reach : null });
+  return { platform: "meta", label: "Meta Ads", subtitle: name || "", accent: "#1877f2", kpis, funnel, extraMetrics, blocks, raw: { totals: { impr, reach, clk, leads, spend }, prev: { impr: P.impr, leads: P.leads, spend: P.spend }, adsets: audRows, ads: adRows2 } };
 }
 
 // Seção Google a partir do dado do Reportei (fallback)
@@ -3465,6 +3483,15 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // migração única: passa a preferência de IA pra Gemini (principal), mantendo Claude como fallback.
+  try {
+    const st = readStore();
+    if (st.settings && !st.settings._aiEngineMigrated) {
+      st.settings.aiEngine = "gemini";
+      st.settings._aiEngineMigrated = true;
+      writeStore(st);
+    }
+  } catch {}
   createWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

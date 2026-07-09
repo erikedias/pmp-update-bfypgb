@@ -2352,7 +2352,7 @@ $("#repBody").addEventListener("click", (e) => {
     const sec = ab.closest(".rr-section");
     const existing = sec.querySelector(".rr-metricmenu");
     if (existing) { existing.remove(); return; }
-    const secData = (state.repDoc.sections || []).find((s) => s.platform === ab.dataset.platform);
+    const secData = ((state.repDoc || {}).sections || []).find((s) => s.platform === ab.dataset.platform);
     const extra = (secData && secData.extraMetrics) || [];
     const shown = new Set([...sec.querySelectorAll(".rr-kpi")].map((k) => k.dataset.metric));
     const avail = extra.filter((m) => !shown.has(m.label));
@@ -2368,7 +2368,7 @@ $("#repBody").addEventListener("click", (e) => {
   if (mb) {
     const menu = mb.closest(".rr-metricmenu"), sec = menu.closest(".rr-section");
     const platform = (sec.querySelector(".rr-addmetric") || {}).dataset ? sec.querySelector(".rr-addmetric").dataset.platform : null;
-    const secData = (state.repDoc.sections || []).find((s) => s.platform === platform);
+    const secData = ((state.repDoc || {}).sections || []).find((s) => s.platform === platform);
     const m = (menu._avail || [])[+mb.dataset.mi];
     menu.remove();
     if (!m) return;

@@ -1,6 +1,6 @@
 {
-  "version": "1.3.15",
-  "notes": "3 novidades no relatório: (1) logos oficiais corrigidas (círculo do Google Ads agora verde, como as marcas reais). (2) Botão 'Salvar no histórico' — o relatório do mês fica guardado no histórico do cliente, dá pra reabrir e exportar em PDF depois. (3) Dá pra remover uma métrica que não faça sentido (✕ no card) e adicionar métricas extras (Compras, Custo por compra, Visitas à página, Taxa de preenchimento…) — ao adicionar, a IA já gera a análise daquela métrica automaticamente.",
+  "version": "1.3.16",
+  "notes": "Correções no relatório: (1) some o texto '💡 Modelo: ...' que vazava pra análise do cliente (era o Claude Code seguindo as regras do CLAUDE.md); agora é removido da saída. (2) Gemini vira o motor PRINCIPAL (Claude só como reserva) — mais rápido e sem esse vazamento. (3) O botão 'Adicionar métrica' agora aparece em todas as plataformas (Meta via Reportei, Google, LinkedIn), não só no Meta por API direta — com métricas extras próprias de cada uma.",
   "files": [
     "src/app.js",
     "src/engine.js",
