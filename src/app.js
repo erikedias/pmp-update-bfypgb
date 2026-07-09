@@ -2103,7 +2103,6 @@ $("#gerarRelBtn").addEventListener("click", gerarRelatorio);
 async function gerarRelatorio() {
   const projectId = Number($("#repClientSel").value);
   if (!projectId) { toast("Selecione um cliente.", true); return; }
-  if (!state.settings.geminiKey) { toast("Configure a chave do Gemini.", true); return; }
   const { y, m } = state.repMonth;
   const start = `${y}-${pad(m)}-01`;
   const end = iso(new Date(y, m, 0)); // último dia do mês
@@ -2113,44 +2112,59 @@ async function gerarRelatorio() {
   const monthLabel = monthLabelOf(y, m);
   const repCli = state.clients.find((c) => c.projectId === projectId) || {};
   const cName = repCli.name || "";
-  const reporteiId = reporteiIdOf(repCli); // null se cliente só do Trello → usa conta Meta/Google direto
-  const rAds = repCli.adAccounts || {};
-  const directArgs = reporteiId ? {} : { directMeta: rAds.meta || null, directGoogle: rAds.google || null };
-  if (!reporteiId && !rAds.meta && !rAds.google) { toast("Cliente sem Reportei e sem conta Meta/Google vinculada — sem dados para o relatório.", true); return; }
   const body = $("#repBody");
-  body.innerHTML = '<div class="state"><div class="big">⏳</div>Puxando o mês (e o anterior, pra comparar) e escrevendo o relatório…</div>';
-  $("#copyRelBtn").classList.add("hidden");
+  body.innerHTML = '<div class="state"><div class="big">⏳</div>Puxando dado ao vivo (Meta/Google pela sua API) + LinkedIn pelo Reportei, com o mês anterior pra comparar…</div>';
+  $("#copyRelBtn").classList.add("hidden"); $("#pdfRelBtn").classList.add("hidden");
   try {
-    const resp = await window.api.reporteiWeekData({ projectId: reporteiId, start, end, includeAds: true, ...directArgs });
-    if (!resp.platforms || !resp.platforms.length) {
-      body.innerHTML = `<div class="state">Sem dados de mídia paga em ${monthLabel} para este cliente.${(resp.notes || []).length ? "<br><br>" + resp.notes.join("<br>") : ""}</div>`;
+    const resp = await window.api.reportBuild({ projectId, start, end, prevStart, prevEnd });
+    if (!resp.sections || !resp.sections.length) {
+      body.innerHTML = `<div class="state">Sem dados de mídia paga em ${monthLabel} para este cliente.${(resp.notes || []).length ? "<br><br>" + resp.notes.join("<br>") : "<br><br>Vincule a conta Meta/Google (Configurações) ou o projeto no Reportei."}</div>`;
       return;
     }
-    let prevResults = [];
-    try { const pr = await window.api.reporteiWeekData({ projectId: reporteiId, start: prevStart, end: prevEnd, ...directArgs }); prevResults = pr.platforms || []; } catch {}
-    const prevMap = {}; prevResults.forEach((p) => { prevMap[p.platform] = p.totals || {}; });
-    const repC = state.clients.find((c) => c.projectId === projectId) || {};
-    let leads = null;
-    try { if (repC.leads && repC.leads.sheetUrl) leads = await window.api.leadsSummary({ projectId, start, end }); } catch {}
-
-    // 1) TABELAS fiéis do Reportei (campanha/público/anúncio) com placeholders de análise
-    body.innerHTML = `<div class="section-title" style="margin-top:0">📄 ${cName} · ${monthLabel}</div>`
-      + resp.platforms.map((pr, i) => repPlatformHtml(pr, prevMap[pr.platform] || {}, repC, i)).join("")
-      + `<div class="section-title">🏁 Conclusão</div><div class="analysis-box rep-an" id="repFinal">⏳ gerando…</div>`;
-
-    // contexto pra retries por seção
-    state.repCtx = { cName, monthLabel, platforms: resp.platforms, prevMap, benchmarks: repC.benchmarks || null, leads, cplIdeal: repC.cplIdeal || null };
-
-    // 2) análises por plataforma (campanha→público→anúncio), uma chamada por plataforma
-    for (let i = 0; i < resp.platforms.length; i++) await genRepPlatform(i);
-    // 3) conclusão (qualificação + CPL + próximos passos)
-    await genRepFinal();
-
-    $("#copyRelBtn").classList.remove("hidden");
+    ReportView.renderInto(body, resp.sections, { editable: true });
+    state.repDoc = { cName, monthLabel, sections: resp.sections };
+    $("#copyRelBtn").classList.remove("hidden"); $("#pdfRelBtn").classList.remove("hidden");
+    if ((resp.notes || []).length) console.warn("[relatório]", resp.notes.join(" | "));
+    // preenche a análise de cada seção (Gemini/Claude) — em paralelo
+    resp.sections.forEach((sec) => fillReportAnalysis(sec, cName, monthLabel));
+    return;
   } catch (e) {
     body.innerHTML = `<div class="state error"><div class="big">⚠️</div>${e.message}</div>`;
   }
 }
+
+// preenche o bloco de análise de UMA seção (Meta/Google/LinkedIn) com o texto da IA
+async function fillReportAnalysis(sec, cName, monthLabel) {
+  const el = document.querySelector(`#repBody [data-analysis="${sec.platform}"]`);
+  if (!el) return;
+  try {
+    const raw = sec.raw || {};
+    const pr = { platform: sec.platform, totals: raw.totals || {}, rows: [] };
+    (raw.campaigns || []).forEach((c) => pr.rows.push({ level: "campaign", name: c.name, metrics: { impressions: c.impr, reach: c.reach, clicks: c.clk, leads: c.results, spend: c.spend, ctr: c.ctr } }));
+    const txt = await window.api.geminiReportPlatform({ clientName: cName, monthLabel, pr, prevTotals: raw.prev || {}, benchmarks: null });
+    const clean = (txt || "").replace(/===\s*\w+\s*===/g, "").replace(/\n{3,}/g, "\n\n").trim();
+    el.textContent = clean || "—";
+    el.contentEditable = "true";
+  } catch (e) {
+    el.innerHTML = `<span class="rr-ph">⚠️ ${e.message} — <a href="#" class="rep-retry-an" data-p="${sec.platform}">tentar de novo</a></span>`;
+    const a = el.querySelector(".rep-retry-an");
+    if (a) a.addEventListener("click", (ev) => { ev.preventDefault(); el.innerHTML = '<span class="rr-ph">⏳ gerando análise…</span>'; fillReportAnalysis(sec, cName, monthLabel); });
+  }
+}
+
+// exportar o relatório visível em PDF nítido (A4)
+$("#pdfRelBtn").addEventListener("click", async () => {
+  const doc = document.querySelector("#repBody .rr-page");
+  if (!doc) { toast("Gere o relatório primeiro.", true); return; }
+  const d = state.repDoc || {};
+  const btn = $("#pdfRelBtn"), old = btn.textContent;
+  btn.textContent = "⏳ gerando PDF…"; btn.disabled = true;
+  try {
+    const r = await window.api.reportExportPdf({ html: `<div class="rr-page">${doc.innerHTML}</div>`, title: `${d.cName || "relatorio"} - ${d.monthLabel || ""}` });
+    if (r && r.saved) toast("PDF salvo!");
+  } catch (e) { toast("Erro ao gerar PDF: " + e.message, true); }
+  finally { btn.textContent = old; btn.disabled = false; }
+});
 
 // gera (ou regenera) a análise de UMA plataforma e preenche as 3 caixas
 async function genRepPlatform(i) {
@@ -2239,18 +2253,14 @@ function repPlatformHtml(pr, prev, repC, i) {
     </div></div>`;
 }
 $("#copyRelBtn").addEventListener("click", async () => {
-  const ctx = state.repCtx;
-  let out = ctx ? `${ctx.cName} · Relatório de ${ctx.monthLabel}\n` : "";
-  if (ctx) ctx.platforms.forEach((pr, i) => {
-    out += `\n========== ${E.PLATFORMS[pr.platform].label} ==========\n`;
-    [["camp", "Campanhas"], ["aud", "Públicos"], ["ad", "Anúncios"]].forEach(([lv, lbl]) => {
-      const el = $(`#repAn-${i}-${lv}`);
-      if (el && el.textContent && !el.querySelector(".rep-retry")) out += `\n[${lbl}]\n${el.textContent.trim()}\n`;
-    });
+  const d = state.repDoc; const doc = document.querySelector("#repBody .rr-page");
+  if (!doc) { toast("Gere o relatório primeiro.", true); return; }
+  let out = d ? `${d.cName} · Relatório de ${d.monthLabel}\n` : "";
+  doc.querySelectorAll(".rr-section").forEach((sec) => {
+    const h = sec.querySelector(".rr-head-txt h2"); if (h) out += `\n========== ${h.textContent.trim()} ==========\n`;
+    const an = sec.querySelector(".rr-analysis"); if (an && an.textContent.trim() && !an.querySelector(".rr-ph")) out += `\n${an.textContent.trim()}\n`;
   });
-  const fin = $("#repFinal");
-  if (fin && fin.textContent && !fin.querySelector(".rep-retry")) out += `\n========== CONCLUSÃO ==========\n${fin.textContent.trim()}\n`;
-  try { await navigator.clipboard.writeText(out); toast("Relatório copiado!"); }
+  try { await navigator.clipboard.writeText(out); toast("Análises copiadas!"); }
   catch { toast("Não consegui copiar — selecione e copie manualmente.", true); }
 });
 

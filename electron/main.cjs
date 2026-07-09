@@ -2050,6 +2050,270 @@ ipcMain.handle("clients:get", () => readStore().clients);
 ipcMain.handle("clients:set", (_e, clients) => { const st = readStore(); st.clients = clients; writeStore(st); return st.clients; });
 
 ipcMain.handle("reportei:projects", async (_e, q) => reporteiProjects(readStore().settings.reporteiToken, q));
+
+/* ============================================================
+   RELATÓRIO estilo Reportei — dado ao vivo (Meta/Google via API própria,
+   LinkedIn via Reportei). Monta o "contrato" que o report-view.js renderiza.
+   ============================================================ */
+
+// insights genéricos do Graph (paginação leve + opções: level, breakdowns, time_increment)
+async function graphInsights(accountId, tok, start, end, opts) {
+  opts = opts || {};
+  const tr = encodeURIComponent(JSON.stringify({ since: start, until: end }));
+  const fields = opts.fields || "impressions,reach,inline_link_clicks,inline_link_click_ctr,spend,actions";
+  let url = `${GRAPH}/${actId(accountId)}/insights?fields=${fields}&time_range=${tr}&limit=${opts.limit || 500}&access_token=${encodeURIComponent(tok)}`;
+  if (opts.level) url += `&level=${opts.level}`;
+  if (opts.breakdowns) url += `&breakdowns=${opts.breakdowns}`;
+  if (opts.time_increment) url += `&time_increment=${opts.time_increment}`;
+  if (opts.level && opts.activeOnly) url += `&filtering=${encodeURIComponent(JSON.stringify([{ field: `${opts.level}.effective_status`, operator: "IN", value: ["ACTIVE"] }]))}`;
+  const r = await httpJson(url);
+  let data = r.data || [], next = r.paging && r.paging.next, guard = 0;
+  while (next && guard++ < 6) { const rr = await httpJson(next); data = data.concat(rr.data || []); next = rr.paging && rr.paging.next; }
+  return data;
+}
+
+const _en = (v) => Number(v || 0).toLocaleString("en-US");
+const _brl = (v) => (v == null || isNaN(v)) ? "—" : "R$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const _pct = (v) => (v == null || isNaN(v)) ? "—" : parseFloat(Number(v).toFixed(2)) + "%";
+const _dir = (c, p) => (c >= (p || 0) ? "up" : "down");
+
+// leads: prioriza formulário no Meta (leadgen) → pixel offsite → unificado
+function metaLeadInfo(actions) {
+  const g = (t) => { const a = (actions || []).find((x) => x.action_type === t); return a ? Number(a.value) : 0; };
+  const onMeta = g("onsite_conversion.lead_grouped") || g("leadgen_grouped") || g("onsite_conversion.lead");
+  const offsite = g("offsite_conversion.fb_pixel_lead");
+  const unified = g("lead");
+  if (onMeta) return { value: onMeta, label: "Leads no Meta" };
+  if (offsite) return { value: offsite, label: "Lead" };
+  return { value: unified, label: "Lead" };
+}
+const metaMsg = (actions) => { const a = (actions || []).find((x) => x.action_type === "onsite_conversion.messaging_conversation_started_7d"); return a ? Number(a.value) : 0; };
+
+async function metaReportSection(accountId, start, end, prevStart, prevEnd, name) {
+  const tok = readStore().settings.metaToken;
+  if (!tok || !accountId) return null;
+  const acc = actId(accountId), n = (v) => (v == null || v === "" ? 0 : Number(v));
+  const campFields = "campaign_name,impressions,reach,inline_link_clicks,inline_link_click_ctr,frequency,spend,actions";
+  const [camps, campsPrev] = await Promise.all([
+    graphInsights(acc, tok, start, end, { level: "campaign", activeOnly: true, fields: campFields }),
+    graphInsights(acc, tok, prevStart, prevEnd, { level: "campaign", activeOnly: true, fields: "impressions,reach,inline_link_clicks,spend,actions" }).catch(() => []),
+  ]);
+  const sum = (rows) => rows.reduce((t, r) => { t.impr += n(r.impressions); t.reach += n(r.reach); t.clk += n(r.inline_link_clicks); t.spend += n(r.spend); t.leads += metaLeadInfo(r.actions).value; t.msg += metaMsg(r.actions); return t; }, { impr: 0, reach: 0, clk: 0, spend: 0, leads: 0, msg: 0 });
+  const T = sum(camps), P = sum(campsPrev);
+  const cpm = (t) => t.impr ? t.spend / t.impr * 1000 : null, cpc = (t) => t.clk ? t.spend / t.clk : null, ctr = (t) => t.impr ? t.clk / t.impr * 100 : null, freq = (t) => t.reach ? t.impr / t.reach : null, cpl = (t) => t.leads ? t.spend / t.leads : null;
+  const kpis = [
+    { label: "Impressões Totais", kind: "int", value: T.impr, prev: P.impr },
+    { label: "Alcance Total", kind: "int", value: T.reach, prev: P.reach },
+    { label: "CPM médio", kind: "brl", value: cpm(T), prev: cpm(P) },
+    { label: "Total de cliques no link", kind: "int", value: T.clk, prev: P.clk },
+    { label: "CPC médio", kind: "brl", value: cpc(T), prev: cpc(P) },
+    { label: "CTR (Taxa de cliques no link)", kind: "pct", value: ctr(T), prev: ctr(P) },
+    { label: "Frequência", kind: "num2", value: freq(T), prev: freq(P) },
+    { label: "Todos os cadastros (leads)", kind: "int", value: T.leads, prev: P.leads },
+    { label: "Custo por Todos os cadastros (leads)", kind: "brl", value: cpl(T), prev: cpl(P), big: true },
+    { label: "Valor investido", kind: "brl", value: T.spend, prev: P.spend, big: true },
+  ];
+  const funnel = [
+    { label: "Valor investido", value: _brl(T.spend), dir: _dir(T.spend, P.spend) },
+    { label: "Impressões Totais", value: _en(T.impr), dir: _dir(T.impr, P.impr) },
+    { label: "Alcance Total", value: _en(T.reach), dir: _dir(T.reach, P.reach) },
+    { label: "Total de cliques no link", value: _en(T.clk), dir: _dir(T.clk, P.clk) },
+    { label: "Conversas iniciadas por mensagem", value: _en(T.msg), dir: _dir(T.msg, P.msg) },
+    { label: "Todos os cadastros (leads)", value: _en(T.leads), dir: _dir(T.leads, P.leads) },
+  ];
+  const rowFrom = (r, nameKey) => { const li = metaLeadInfo(r.actions), spend = n(r.spend), impr = n(r.impressions), reach = n(r.reach); return { name: r[nameKey] || "(sem nome)", impr, reach, cpm: impr ? spend / impr * 1000 : null, ctr: r.inline_link_click_ctr != null ? Number(r.inline_link_click_ctr) : (impr ? n(r.inline_link_clicks) / impr * 100 : null), freq: r.frequency != null ? Number(r.frequency) : (reach ? impr / reach : null), results: li.value, label: li.label, cpr: li.value ? spend / li.value : null, spend }; };
+  const tblRow = (x) => [{ v: x.name, l: true }, _en(x.impr), _en(x.reach), _brl(x.cpm), _pct(x.ctr), { v: String(x.results), sub: x.label }, { v: _brl(x.cpr), sub: x.label }, _brl(x.spend)];
+  const campRows = camps.map((r) => rowFrom(r, "campaign_name")).filter((x) => x.impr > 0).sort((a, b) => b.results - a.results).slice(0, 8);
+  const adsets = await graphInsights(acc, tok, start, end, { level: "adset", activeOnly: true, fields: "adset_name,impressions,reach,inline_link_clicks,inline_link_click_ctr,spend,actions" }).catch(() => []);
+  const adsetRows = adsets.map((r) => rowFrom(r, "adset_name")).filter((x) => x.impr > 0).sort((a, b) => b.results - a.results).slice(0, 8);
+  const adsRaw = await graphInsights(acc, tok, start, end, { level: "ad", activeOnly: true, fields: "ad_id,ad_name,impressions,reach,inline_link_clicks,inline_link_click_ctr,frequency,spend,actions" }).catch(() => []);
+  const thumbMap = {};
+  try { const ads = await httpJson(`${GRAPH}/${acc}/ads?fields=id,creative{thumbnail_url,image_url}&limit=400&access_token=${encodeURIComponent(tok)}`); (ads.data || []).forEach((a) => { const c = a.creative || {}; thumbMap[a.id] = c.thumbnail_url || c.image_url || ""; }); } catch {}
+  const adRows = adsRaw.map((r) => { const x = rowFrom(r, "ad_name"); x.thumb = thumbMap[r.ad_id] || ""; return x; }).filter((x) => x.impr > 0).sort((a, b) => b.results - a.results).slice(0, 10);
+  const adTblRow = (x) => [{ thumb: x.thumb, name: x.name }, _en(x.impr), _en(x.reach), _brl(x.cpm), _pct(x.ctr), (x.freq != null ? x.freq.toFixed(2) : "—"), { v: String(x.results), sub: x.label }, { v: _brl(x.cpr), sub: x.label }, _brl(x.spend)];
+
+  const charts = {};
+  try { const d = await graphInsights(acc, tok, start, end, { time_increment: 1, fields: "inline_link_clicks,inline_link_click_ctr" }); if (d.length) { const L = d.map((x) => { const p = (x.date_start || "").split("-"); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : x.date_start; }); charts.timeseries = { labels: L, clicks: d.map((x) => n(x.inline_link_clicks)), ctr: d.map((x) => n(x.inline_link_click_ctr)) }; } } catch {}
+  try { const a = await graphInsights(acc, tok, start, end, { breakdowns: "age", fields: "impressions,reach" }); if (a.length) { const m = {}; a.forEach((r) => { m[r.age] = m[r.age] || { i: 0, c: 0 }; m[r.age].i += n(r.impressions); m[r.age].c += n(r.reach); }); const k = Object.keys(m); charts.age = { labels: k, impressions: k.map((x) => m[x].i), reach: k.map((x) => m[x].c) }; } } catch {}
+  try { const g = await graphInsights(acc, tok, start, end, { breakdowns: "gender", fields: "impressions,reach" }); if (g.length) { const map = { female: "Feminino", male: "Masculino", unknown: "Desconhecido" }, m = {}; g.forEach((r) => { const k = map[r.gender] || r.gender; m[k] = m[k] || { i: 0, c: 0 }; m[k].i += n(r.impressions); m[k].c += n(r.reach); }); const k = Object.keys(m); charts.gender = { labels: k, impressions: k.map((x) => m[x].i), reach: k.map((x) => m[x].c) }; } } catch {}
+  try { const dv = await graphInsights(acc, tok, start, end, { breakdowns: "impression_device", fields: "reach" }); if (dv.length) { const bk = (v) => /desktop/.test(v) ? "Desktop" : /mobile_web|www/.test(v) ? "Mobile web" : "Mobile app"; const m = {}; dv.forEach((r) => { const k = bk(r.impression_device || ""); m[k] = (m[k] || 0) + n(r.reach); }); const col = { "Mobile app": "#2563eb", "Desktop": "#22c55e", "Mobile web": "#7cc4ff" }; charts.device = Object.keys(m).map((k) => ({ label: k, value: m[k], color: col[k] || "#94a3b8" })); } } catch {}
+
+  return {
+    platform: "meta", label: "Meta Ads", subtitle: name || "", accent: "#1877f2", kpis, funnel, charts,
+    blocks: [
+      { type: "title", text: "Campanhas em destaque" },
+      { type: "table", cols: [{ label: "Nome da Campanha", l: true }, { label: "Impressões" }, { label: "Alcance" }, { label: "CPM" }, { label: "CTR (Taxa de cliques no link)" }, { label: "Resultados", sort: true }, { label: "Custo por resultados" }, { label: "Valor investido" }], rows: campRows.map(tblRow) },
+      { type: "title", text: "Conjunto de anúncios em destaque" },
+      { type: "table", cols: [{ label: "Conjunto de anúncio", l: true }, { label: "Impressões" }, { label: "Alcance" }, { label: "CPM" }, { label: "CTR (Taxa de cliques no link)" }, { label: "Resultados", sort: true }, { label: "Custo por resultados" }, { label: "Valor investido" }], rows: adsetRows.map(tblRow) },
+      { type: "analysis", id: "meta" },
+      { type: "title", text: "Anúncios em Destaque" },
+      { type: "table", cols: [{ label: "Anúncio", l: true }, { label: "Impressões" }, { label: "Alcance" }, { label: "CPM" }, { label: "CTR (Taxa de cliques no link)" }, { label: "Frequência" }, { label: "Resultados", sort: true }, { label: "Custo por resultados" }, { label: "Valor investido" }], rows: adRows.map(adTblRow) },
+    ],
+    raw: { totals: T, prev: P, campaigns: campRows, adsets: adsetRows, ads: adRows },
+  };
+}
+
+async function googleReportSection(customerId, start, end, prevStart, prevEnd, name) {
+  const s = readStore().settings;
+  if (!s.googleAdsRefreshToken || !customerId) return null;
+  const cid = String(customerId).replace(/-/g, ""), headers = await gadsHeaders();
+  const q = async (a, b) => {
+    const query = `SELECT campaign.name, metrics.impressions, metrics.clicks, metrics.conversions, metrics.cost_micros, metrics.video_views, metrics.search_top_impression_share FROM campaign WHERE segments.date BETWEEN '${a}' AND '${b}' AND campaign.status = 'ENABLED' AND metrics.impressions > 0`;
+    let pt = null, rows = [];
+    do { const body = JSON.stringify(pt ? { query, pageToken: pt } : { query }); const r = await googleAdsApi(`customers/${cid}/googleAds:search`, { method: "POST", headers, body }); rows = rows.concat(r.results || []); pt = r.nextPageToken; } while (pt && rows.length < 400);
+    return rows;
+  };
+  const cur = await q(start, end), prev = await q(prevStart, prevEnd).catch(() => []);
+  const M = (m = {}) => ({ impr: Number(m.impressions || 0), clk: Number(m.clicks || 0), conv: Number(m.conversions || 0), cost: Number(m.costMicros || 0) / 1e6, vv: Number(m.videoViews || 0) });
+  const sum = (rows) => rows.reduce((t, r) => { const m = M(r.metrics || {}); t.impr += m.impr; t.clk += m.clk; t.conv += m.conv; t.cost += m.cost; t.vv += m.vv; return t; }, { impr: 0, clk: 0, conv: 0, cost: 0, vv: 0 });
+  const T = sum(cur), P = sum(prev);
+  const cpm = (t) => t.impr ? t.cost / t.impr * 1000 : null, cpc = (t) => t.clk ? t.cost / t.clk : null, ctr = (t) => t.impr ? t.clk / t.impr * 100 : null, cvr = (t) => t.clk ? t.conv / t.clk * 100 : null, cpa = (t) => t.conv ? t.cost / t.conv : null;
+  const kpis = [
+    { label: "Impressões", kind: "int", value: T.impr, prev: P.impr },
+    { label: "CPM médio", kind: "brl", value: cpm(T), prev: cpm(P) },
+    { label: "Cliques", kind: "int", value: T.clk, prev: P.clk },
+    { label: "CPC médio", kind: "brl", value: cpc(T), prev: cpc(P) },
+    { label: "CTR (Taxa de Cliques)", kind: "pct", value: ctr(T), prev: ctr(P) },
+    { label: "Visualizações dos Vídeos", kind: "int", value: T.vv, prev: P.vv },
+    { label: "Conversões", kind: "int", value: T.conv, prev: P.conv },
+    { label: "Taxa de conversão", kind: "pct", value: cvr(T), prev: cvr(P) },
+    { label: "Custo por Conversão", kind: "brl", value: cpa(T), prev: cpa(P), big: true },
+    { label: "Custo", kind: "brl", value: T.cost, prev: P.cost, big: true },
+  ];
+  const rows = cur.map((r) => { const m = M(r.metrics || {}), top = Number((r.metrics || {}).searchTopImpressionShare || 0) * 100; return { name: (r.campaign && r.campaign.name) || "(campanha)", m, top }; }).sort((a, b) => b.m.clk - a.m.clk).slice(0, 20);
+  const tbl = { type: "table", cols: [{ label: "Campanhas", l: true }, { label: "Impressões" }, { label: "Cliques", sort: true }, { label: "CTR (Taxa de Cliques)" }, { label: "CPC médio" }, { label: "Conversões" }, { label: "Custo por conversão" }, { label: "% de Anúncios na 1ª posição" }, { label: "Custo" }], rows: rows.map((x) => [{ v: x.name, l: true }, _en(x.m.impr), _en(x.m.clk), _pct(x.m.impr ? x.m.clk / x.m.impr * 100 : null), _brl(x.m.clk ? x.m.cost / x.m.clk : null), _en(x.m.conv), _brl(x.m.conv ? x.m.cost / x.m.conv : null), _pct(x.top), _brl(x.m.cost)]) };
+  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, blocks: [{ type: "analysis", id: "google" }, { type: "title", text: "Todas as Campanhas" }, tbl], raw: { totals: T, prev: P } };
+}
+
+function linkedinReportSection(li, prev, name) {
+  const t = li.totals || {}, p = (prev && prev.totals) || {}, n = (v) => (v == null ? 0 : Number(v));
+  const spendOf = (o) => n(o.spend != null ? o.spend : o.cost);
+  const sends = n(t.sends), opens = n(t.opens), clicks = n(t.clicks), leads = n(t.leads), spend = spendOf(t);
+  const ps = n(p.sends), po = n(p.opens), pc = n(p.clicks), pl = n(p.leads), pspend = spendOf(p);
+  const rate = (a, b) => b ? a / b * 100 : null;
+  const kpis = [
+    { label: "Envios", kind: "int", value: sends, prev: ps },
+    { label: "Aberturas", kind: "int", value: opens, prev: po },
+    { label: "Taxa de abertura", kind: "pct", value: rate(opens, sends), prev: rate(po, ps) },
+    { label: "Cliques", kind: "int", value: clicks, prev: pc },
+    { label: "Taxa de cliques", kind: "pct", value: rate(clicks, opens), prev: rate(pc, po) },
+    { label: "Leads", kind: "int", value: leads, prev: pl },
+    { label: "CPL", kind: "brl", value: leads ? spend / leads : null, prev: pl ? pspend / pl : null, big: true },
+    { label: "Valor investido", kind: "brl", value: spend, prev: pspend, big: true },
+  ];
+  const funnel = [
+    { label: "Valor investido", value: _brl(spend), dir: _dir(spend, pspend) },
+    { label: "Envios", value: _en(sends), dir: _dir(sends, ps) },
+    { label: "Aberturas", value: _en(opens), dir: _dir(opens, po) },
+    { label: "Cliques", value: _en(clicks), dir: _dir(clicks, pc) },
+    { label: "Leads", value: _en(leads), dir: _dir(leads, pl) },
+  ];
+  const camps = (li.rows || []).filter((r) => r.level === "campaign");
+  const tbl = { type: "table", cols: [{ label: "Campanha", l: true }, { label: "Envios" }, { label: "Aberturas" }, { label: "Cliques" }, { label: "Leads" }, { label: "CPL" }, { label: "Investido" }], rows: camps.map((r) => { const m = r.metrics || {}, sp = spendOf(m), ld = n(m.leads); return [{ v: r.name, l: true }, _en(n(m.sends)), _en(n(m.opens)), _en(n(m.clicks)), _en(ld), _brl(ld ? sp / ld : null), _brl(sp)]; }) };
+  return { platform: "linkedin", label: "LinkedIn Ads", subtitle: name || "", accent: "#0a66c2", topAccent: true, kpis, funnel, blocks: [{ type: "analysis", id: "linkedin" }, { type: "title", text: "Campanhas" }, tbl], raw: { totals: t, prev: p } };
+}
+
+// Seção Meta a partir do dado do Reportei (fallback quando não há conta Meta direta) — sem gráficos/thumbs
+function metaLeanFromReportei(li, prev, name) {
+  const t = li.totals || {}, p = (prev && prev.totals) || {}, n = (v) => (v == null ? 0 : Number(v));
+  const impr = n(t.impressions), reach = n(t.reach), clk = n(t.clicks), leads = n(t.leads), spend = n(t.spend != null ? t.spend : t.cost);
+  const P = { impr: n(p.impressions), reach: n(p.reach), clk: n(p.clicks), leads: n(p.leads), spend: n(p.spend != null ? p.spend : p.cost) };
+  const cpm = (s, i) => i ? s / i * 1000 : null, cpc = (s, c) => c ? s / c : null, ctr = (c, i) => i ? c / i * 100 : null, cpl = (s, l) => l ? s / l : null;
+  const kpis = [
+    { label: "Impressões Totais", kind: "int", value: impr, prev: P.impr },
+    { label: "Alcance Total", kind: "int", value: reach, prev: P.reach },
+    { label: "CPM médio", kind: "brl", value: cpm(spend, impr), prev: cpm(P.spend, P.impr) },
+    { label: "Cliques", kind: "int", value: clk, prev: P.clk },
+    { label: "CPC médio", kind: "brl", value: cpc(spend, clk), prev: cpc(P.spend, P.clk) },
+    { label: "CTR", kind: "pct", value: t.ctr != null ? Number(t.ctr) : ctr(clk, impr), prev: p.ctr != null ? Number(p.ctr) : ctr(P.clk, P.impr) },
+    { label: "Todos os cadastros (leads)", kind: "int", value: leads, prev: P.leads },
+    { label: "Custo por Todos os cadastros (leads)", kind: "brl", value: cpl(spend, leads), prev: cpl(P.spend, P.leads), big: true },
+    { label: "Valor investido", kind: "brl", value: spend, prev: P.spend, big: true },
+  ];
+  const funnel = [
+    { label: "Valor investido", value: _brl(spend), dir: _dir(spend, P.spend) },
+    { label: "Impressões Totais", value: _en(impr), dir: _dir(impr, P.impr) },
+    { label: "Alcance Total", value: _en(reach), dir: _dir(reach, P.reach) },
+    { label: "Cliques", value: _en(clk), dir: _dir(clk, P.clk) },
+    { label: "Todos os cadastros (leads)", value: _en(leads), dir: _dir(leads, P.leads) },
+  ];
+  const mkTbl = (lvl, label) => { const rows = (li.rows || []).filter((r) => r.level === lvl); if (!rows.length) return null; return { type: "table", cols: [{ label, l: true }, { label: "Impressões" }, { label: "Alcance" }, { label: "CPM" }, { label: "CTR" }, { label: "Leads", sort: true }, { label: "CPL" }, { label: "Investido" }], rows: rows.map((r) => { const m = r.metrics || {}, sp = n(m.spend), i = n(m.impressions), ld = n(m.leads); return [{ v: r.name, l: true }, _en(i), _en(n(m.reach)), _brl(i ? sp / i * 1000 : null), _pct(m.ctr != null ? Number(m.ctr) : (i ? n(m.clicks) / i * 100 : null)), { v: String(ld) }, _brl(ld ? sp / ld : null), _brl(sp)]; }) }; };
+  const blocks = [];
+  const c = mkTbl("campaign", "Campanhas"); if (c) blocks.push({ type: "title", text: "Campanhas em destaque" }, c);
+  const a = mkTbl("audience", "Conjunto de anúncio"); if (a) blocks.push({ type: "title", text: "Conjunto de anúncios em destaque" }, a);
+  blocks.push({ type: "analysis", id: "meta" });
+  const d = mkTbl("ad", "Anúncio"); if (d) blocks.push({ type: "title", text: "Anúncios em Destaque" }, d);
+  return { platform: "meta", label: "Meta Ads", subtitle: name || "", accent: "#1877f2", kpis, funnel, blocks, raw: { totals: { impr, reach, clk, leads, spend }, prev: { impr: P.impr, leads: P.leads, spend: P.spend } } };
+}
+
+// Seção Google a partir do dado do Reportei (fallback)
+function googleLeanFromReportei(li, prev, name) {
+  const t = li.totals || {}, p = (prev && prev.totals) || {}, n = (v) => (v == null ? 0 : Number(v));
+  const impr = n(t.impressions), clk = n(t.clicks), conv = n(t.conversions), cost = n(t.cost);
+  const P = { impr: n(p.impressions), clk: n(p.clicks), conv: n(p.conversions), cost: n(p.cost) };
+  const cpm = (s, i) => i ? s / i * 1000 : null, cpc = (s, c) => c ? s / c : null, ctr = (c, i) => i ? c / i * 100 : null, cvr = (cv, c) => c ? cv / c * 100 : null, cpa = (s, cv) => cv ? s / cv : null;
+  const kpis = [
+    { label: "Impressões", kind: "int", value: impr, prev: P.impr },
+    { label: "CPM médio", kind: "brl", value: cpm(cost, impr), prev: cpm(P.cost, P.impr) },
+    { label: "Cliques", kind: "int", value: clk, prev: P.clk },
+    { label: "CPC médio", kind: "brl", value: (t.cpc != null && Number(t.cpc)) ? Number(t.cpc) : cpc(cost, clk), prev: cpc(P.cost, P.clk) },
+    { label: "CTR (Taxa de Cliques)", kind: "pct", value: ctr(clk, impr), prev: ctr(P.clk, P.impr) },
+    { label: "Conversões", kind: "int", value: conv, prev: P.conv },
+    { label: "Taxa de conversão", kind: "pct", value: cvr(conv, clk), prev: cvr(P.conv, P.clk) },
+    { label: "Custo por Conversão", kind: "brl", value: cpa(cost, conv), prev: cpa(P.cost, P.conv), big: true },
+    { label: "Custo", kind: "brl", value: cost, prev: P.cost, big: true },
+  ];
+  const camps = (li.rows || []).filter((r) => r.level === "campaign");
+  const tbl = { type: "table", cols: [{ label: "Campanhas", l: true }, { label: "Impressões" }, { label: "Cliques", sort: true }, { label: "CTR (Taxa de Cliques)" }, { label: "CPC médio" }, { label: "Conversões" }, { label: "Custo por conversão" }, { label: "Custo" }], rows: camps.map((r) => { const m = r.metrics || {}, i = n(m.impressions), c = n(m.clicks), cv = n(m.conversions), co = n(m.cost != null ? m.cost : m.spend); return [{ v: r.name, l: true }, _en(i), _en(c), _pct(i ? c / i * 100 : null), _brl((m.cpc != null && Number(m.cpc)) ? Number(m.cpc) : (c ? co / c : null)), _en(cv), _brl(cv ? co / cv : null), _brl(co)]; }) };
+  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, blocks: [{ type: "analysis", id: "google" }, { type: "title", text: "Todas as Campanhas" }, tbl], raw: { totals: { impr, clk, conv, cost }, prev: P } };
+}
+
+ipcMain.handle("report:build", async (_e, { projectId, start, end, prevStart, prevEnd }) => {
+  const st = readStore();
+  const client = projectId ? (st.clients || []).find((c) => c.projectId === projectId) : null;
+  const acc = (client && client.adAccounts) || {};
+  const cname = client && client.name;
+  const sections = [], notes = [];
+  // Reportei cobre Meta/Google/LinkedIn quando não há conta direta vinculada
+  const repId = client ? (client.reporteiId || (client.noReportei ? null : client.projectId)) : null;
+  let repCur = null, repPrev = null;
+  if (repId && st.settings.reporteiToken) {
+    try { repCur = await reporteiWeekData(st.settings.reporteiToken, repId, start, end, true); } catch (e) { notes.push("Reportei: " + (e.message || e)); }
+    try { repPrev = await reporteiWeekData(st.settings.reporteiToken, repId, prevStart, prevEnd, false); } catch {}
+  }
+  const rp = (res, plat) => res && (res.platforms || []).find((p) => p.platform === plat);
+  // META — API direta (rica) se houver conta; senão Reportei (lean)
+  let metaDone = false;
+  if (acc.meta && st.settings.metaToken) { try { const s = await metaReportSection(acc.meta, start, end, prevStart, prevEnd, cname); if (s) { sections.push(s); metaDone = true; } } catch (e) { notes.push("Meta API: " + (e.message || e)); } }
+  if (!metaDone) { const li = rp(repCur, "meta"); if (li) { sections.push(metaLeanFromReportei(li, rp(repPrev, "meta"), cname)); if (acc.meta) notes.push("Meta: usei dados do Reportei (API direta sem retorno)."); } }
+  // GOOGLE
+  let gDone = false;
+  if (acc.google && st.settings.googleAdsRefreshToken) { try { const s = await googleReportSection(acc.google, start, end, prevStart, prevEnd, cname); if (s) { sections.push(s); gDone = true; } } catch (e) { notes.push("Google API: " + (e.message || e)); } }
+  if (!gDone) { const li = rp(repCur, "google"); if (li) { sections.push(googleLeanFromReportei(li, rp(repPrev, "google"), cname)); if (acc.google) notes.push("Google: usei dados do Reportei (API direta sem retorno)."); } }
+  // LINKEDIN — sempre via Reportei
+  { const li = rp(repCur, "linkedin"); if (li) sections.push(linkedinReportSection(li, rp(repPrev, "linkedin"), cname)); }
+  return { sections, notes };
+});
+
+// Exporta o HTML do relatório em PDF nítido (A4, texto vetorial) via printToPDF
+ipcMain.handle("report:exportPdf", async (_e, { html, title }) => {
+  let css = "";
+  try { css = fs.readFileSync(path.join(__dirname, "..", "src", "report-view.css"), "utf8"); } catch {}
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><style>${css}\n@page{size:A4;margin:12mm}body{margin:0}.rr-page{max-width:none;padding:0}</style></head><body class="rr-doc">${html}</body></html>`;
+  const tmp = path.join(app.getPath("temp"), `rep-${Date.now()}.html`);
+  fs.writeFileSync(tmp, doc, "utf8");
+  const win = new BrowserWindow({ show: false, webPreferences: { offscreen: false } });
+  try {
+    await win.loadFile(tmp);
+    await new Promise((r) => setTimeout(r, 700));
+    const pdf = await win.webContents.printToPDF({ printBackground: true, pageSize: "A4", margins: { marginType: "custom", top: 0.5, bottom: 0.5, left: 0.4, right: 0.4 } });
+    const { filePath, canceled } = await dialog.showSaveDialog({ title: "Salvar relatório em PDF", defaultPath: `${(title || "relatorio").replace(/[^\w\-]+/g, "_")}.pdf`, filters: [{ name: "PDF", extensions: ["pdf"] }] });
+    if (canceled || !filePath) return { canceled: true };
+    fs.writeFileSync(filePath, pdf);
+    return { saved: filePath };
+  } finally { win.destroy(); try { fs.unlinkSync(tmp); } catch {} }
+});
+
 ipcMain.handle("reportei:weekData", async (_e, { projectId, start, end, includeAds, directMeta, directGoogle, directGa4 }) => {
   const st = readStore();
   let res = { platforms: [], notes: [] };

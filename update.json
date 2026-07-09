@@ -1,6 +1,6 @@
 {
-  "version": "1.3.1",
-  "notes": "Minha Semana: botão 📋 Trello em cada card (junto do Google/Meta) abre o board do cliente com 1 clique. Inclui: volume de palavras-chave prontas, colar print (⌘V) no GTM, GTM lê a página de verdade, palavras-chave pro Trello, termos por datas específicas",
+  "version": "1.3.2",
+  "notes": "Nova aba de Relatórios no estilo Reportei: KPIs com comparação vs mês anterior, funil, gráficos e tabelas por plataforma (Meta/Google pela API própria, LinkedIn via Reportei), análise automática por IA e exportação em PDF nítido (A4).",
   "files": [
     "src/app.js",
     "src/engine.js",
@@ -12,6 +12,9 @@
     "src/funil-studio/assets/purify.es-V6uLfjnH.js",
     "src/funil-studio/index.html",
     "src/index.html",
+    "src/report-preview.html",
+    "src/report-view.css",
+    "src/report-view.js",
     "src/styles.css",
     "electron/main.cjs",
     "electron/preload.cjs",

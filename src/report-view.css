@@ -1,0 +1,106 @@
+/* =========================================================================
+   report-view.css — clone visual do relatório do Reportei (layout claro,
+   pronto pra PDF). Isolado com prefixo .rr- pra não colidir com o app.
+   ========================================================================= */
+
+.rr-doc {
+  --rr-ink: #1f2937;
+  --rr-ink-2: #374151;
+  --rr-muted: #6b7280;
+  --rr-line: #e9ecf1;
+  --rr-card-line: #e5e7eb;
+  --rr-up: #16a34a;
+  --rr-up-bg: #e7f7ec;
+  --rr-down: #e5484d;
+  --rr-down-bg: #fdecec;
+  --rr-meta: #1877f2;
+  --rr-google: #16a34a;
+  --rr-linkedin: #0a66c2;
+  background: #ffffff;
+  color: var(--rr-ink);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.4;
+}
+
+/* uma "página" do documento */
+.rr-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 34px 44px 48px;
+  background: #fff;
+}
+.rr-section { position: relative; padding-top: 26px; }
+.rr-section + .rr-section { margin-top: 40px; border-top: 1px solid var(--rr-line); }
+.rr-section.rr-top-accent::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 4px;
+  background: var(--rr-accent, var(--rr-meta));
+}
+
+/* -------- cabeçalho da plataforma -------- */
+.rr-head { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+.rr-logo { width: 40px; height: 40px; flex: 0 0 40px; display: flex; align-items: center; justify-content: center; }
+.rr-logo svg { width: 40px; height: 40px; }
+.rr-head-txt h2 { margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -.01em; color: var(--rr-ink); }
+.rr-head-txt .rr-sub { font-size: 12.5px; color: var(--rr-muted); margin-top: 2px; }
+.rr-head .rr-clock { color: #9aa4b2; font-size: 15px; margin-left: 2px; }
+
+/* -------- grade de KPIs -------- */
+.rr-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px 18px; margin: 8px 0 30px; }
+.rr-kpi { text-align: center; }
+.rr-kpi .k-lbl { font-size: 13px; font-weight: 700; color: var(--rr-ink-2); display: inline-flex; align-items: center; gap: 5px; justify-content: center; }
+.rr-kpi .k-q { width: 15px; height: 15px; border-radius: 50%; background: #eef1f5; color: #9aa4b2; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.rr-kpi .k-row { margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.rr-kpi .k-val { font-size: 27px; font-weight: 800; letter-spacing: -.02em; color: var(--rr-ink); }
+.rr-kpi.big .k-val { font-size: 30px; }
+.rr-delta { font-size: 11.5px; font-weight: 700; padding: 3px 7px; border-radius: 6px; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.rr-delta.up { color: var(--rr-up); background: var(--rr-up-bg); }
+.rr-delta.down { color: var(--rr-down); background: var(--rr-down-bg); }
+.rr-delta.flat { color: var(--rr-muted); background: #f1f3f6; }
+.rr-kpi .k-prev { font-size: 11.5px; color: var(--rr-muted); margin-top: 5px; }
+.rr-kpi .k-prev b { color: var(--rr-ink-2); font-weight: 700; }
+/* linha de KPIs "grandes" centralizados (ex.: Custo por leads + Valor investido) */
+.rr-kpis.duo { grid-template-columns: repeat(2, minmax(0, 340px)); justify-content: center; gap: 40px; margin-bottom: 34px; }
+
+/* -------- títulos de seção internos -------- */
+.rr-title { text-align: center; font-size: 15px; font-weight: 800; color: var(--rr-ink-2); margin: 34px 0 18px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.rr-title .k-q { width: 15px; height: 15px; border-radius: 50%; background: #eef1f5; color: #9aa4b2; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+
+/* -------- funil -------- */
+.rr-funnel { display: flex; justify-content: center; margin: 6px 0 30px; }
+
+/* -------- gráficos -------- */
+.rr-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 26px 34px; margin: 8px 0 20px; }
+.rr-chart .rr-ctitle { text-align: center; font-size: 14px; font-weight: 700; color: var(--rr-ink-2); margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.rr-legend { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 8px; }
+.rr-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--rr-muted); }
+.rr-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.rr-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.rr-chart svg.rr-pie { width: 210px; max-width: 100%; margin: 4px auto 0; }
+
+/* -------- tabelas -------- */
+.rr-tbl-wrap { border: 1px solid var(--rr-card-line); border-radius: 12px; overflow: hidden; margin: 4px 0 12px; }
+table.rr-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.rr-tbl thead th { background: #f9fafb; color: var(--rr-muted); font-weight: 600; font-size: 11.5px; text-align: right; padding: 14px 16px; border-bottom: 1px solid var(--rr-card-line); white-space: nowrap; }
+table.rr-tbl thead th.l { text-align: left; }
+table.rr-tbl thead th.sort { color: var(--rr-meta); }
+table.rr-tbl tbody td { padding: 16px; text-align: right; border-bottom: 1px solid #f1f3f6; color: var(--rr-ink-2); vertical-align: middle; }
+table.rr-tbl tbody tr:last-child td { border-bottom: 0; }
+table.rr-tbl tbody td.l { text-align: left; font-weight: 600; color: var(--rr-ink); }
+table.rr-tbl .r-sub { display: block; font-size: 11px; color: var(--rr-muted); font-weight: 400; margin-top: 2px; }
+.rr-thumb { width: 46px; height: 46px; border-radius: 8px; object-fit: cover; background: #f1f3f6; flex: 0 0 46px; }
+.rr-ad-name { display: flex; align-items: center; gap: 12px; text-align: left; }
+
+/* -------- blocos de análise (texto) -------- */
+.rr-analysis { font-size: 13.5px; color: var(--rr-ink-2); line-height: 1.65; margin: 6px 2px 18px; }
+.rr-analysis p { margin: 0 0 12px; }
+.rr-analysis h4 { font-size: 13.5px; font-weight: 800; color: var(--rr-ink); margin: 16px 0 6px; }
+.rr-analysis[contenteditable="true"] { outline: none; }
+.rr-analysis[contenteditable="true"]:focus { background: #fbfcfe; border-radius: 8px; box-shadow: 0 0 0 2px #e7eefd; padding: 8px; margin: -2px; }
+.rr-ph { color: #9aa4b2; font-style: italic; }
+
+@media print {
+  .rr-page { max-width: none; padding: 0 24px; }
+  .rr-section { break-inside: avoid-page; }
+  .rr-charts, .rr-tbl-wrap, .rr-funnel { break-inside: avoid; }
+}

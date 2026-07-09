@@ -6,6 +6,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: https:;">
 <title>Painel de Mídia Paga</title>
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="report-view.css">
 </head>
 <body>
 <div id="app">
@@ -294,6 +295,7 @@
         </div>
         <button class="btn btn-primary" id="gerarRelBtn">Gerar relatório</button>
         <div class="spacer"></div>
+        <button class="btn btn-ghost hidden" id="pdfRelBtn">📄 Exportar PDF</button>
         <button class="btn btn-ghost hidden" id="copyRelBtn">📋 Copiar</button>
       </div>
       <div id="repBody">
@@ -635,6 +637,7 @@
 </div>
 
 <script src="engine.js"></script>
+<script src="report-view.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

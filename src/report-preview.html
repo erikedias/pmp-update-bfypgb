@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Preview relatório (estilo Reportei)</title>
+  <link rel="stylesheet" href="report-view.css">
+  <style>body{margin:0;background:#f3f4f6;padding:24px 0}</style>
+</head>
+<body>
+  <div id="rep"></div>
+  <script src="report-view.js"></script>
+  <script>
+    ReportView.renderInto(document.getElementById("rep"), ReportView.PUKET, { editable: false });
+  </script>
+</body>
+</html>
