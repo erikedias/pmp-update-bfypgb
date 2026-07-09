@@ -1,6 +1,6 @@
 {
-  "version": "1.3.12",
-  "notes": "PDF do relatório: as tabelas largas (ex.: Anúncios em Destaque, com 9 colunas) agora cabem 100% na largura da página — todas as colunas aparecem sem precisar arrastar pro lado. Regras aplicadas direto no PDF (não dependem do modo de impressão), com a coluna de nome mais larga, números sem quebrar no meio e miniaturas menores.",
+  "version": "1.3.13",
+  "notes": "PDF do relatório mais limpo e bem distribuído (estilo Reportei): os números dos KPIs agora ficam TODOS do mesmo tamanho e compactos (antes Valor investido/Custo por lead saíam gigantes), cabeçalho e títulos proporcionais à folha, funil e análise mais enxutos, e os balões de ajuda (?) somem no PDF por serem inúteis no arquivo estático.",
   "files": [
     "src/app.js",
     "src/engine.js",

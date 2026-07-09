@@ -142,4 +142,26 @@ table.rr-tbl .r-sub { display: block; font-size: 11px; color: var(--rr-muted); f
   .rr-ad-name { gap: 7px; min-width: 0; }
   .rr-ad-name span { min-width: 0; word-break: break-word; overflow-wrap: anywhere; }
   .rr-thumb { width: 30px; height: 30px; flex-basis: 30px; }
+  /* KPIs compactos e do MESMO tamanho (estilo Reportei); "?" some no PDF */
+  .k-q { display: none !important; }
+  .rr-kpis { gap: 20px 12px; margin: 6px 0 20px; }
+  .rr-kpis.duo { grid-template-columns: repeat(2, minmax(0, 300px)); gap: 28px; margin-bottom: 20px; }
+  .rr-kpi .k-lbl { font-size: 11px; }
+  .rr-kpi .k-val, .rr-kpi.big .k-val { font-size: 19px; }
+  .rr-kpi .k-row { gap: 6px; margin-top: 5px; }
+  .rr-delta { font-size: 9px; padding: 2px 5px; }
+  .rr-kpi .k-prev { font-size: 9px; margin-top: 3px; }
+  .rr-head { margin-bottom: 16px; gap: 10px; }
+  .rr-logo, .rr-logo svg { width: 30px; height: 30px; flex: 0 0 30px; }
+  .rr-head-txt h2 { font-size: 17px; }
+  .rr-head-txt .rr-sub { font-size: 11px; }
+  .rr-title { font-size: 12.5px; margin: 16px 0 10px; }
+  .rr-chart .rr-ctitle { font-size: 11px; }
+  .rr-fc-lbl { font-size: 10px; min-height: 2.2em; }
+  .rr-fc-val { font-size: 15px; }
+  .rr-fc-prev { font-size: 9px; }
+  .rr-fc-ratio { font-size: 10px; }
+  .rr-analysis { font-size: 11.5px; line-height: 1.55; }
+  .rr-analysis h4 { font-size: 11.5px; }
+  .rr-ns-title { font-size: 12.5px; }
 }

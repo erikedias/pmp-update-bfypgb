@@ -2529,6 +2529,31 @@ ipcMain.handle("report:exportPdf", async (_e, { html, title }) => {
     .rr-thumb{width:30px!important;height:30px!important;flex-basis:30px!important}
     .rr-section,.rr-charts,.rr-tbl-wrap,.rr-funnel,.rr-funnel-h{break-inside:avoid}
     .rr-fcard{min-height:190px}
+    /* KPIs no PDF: MESMO tamanho pra todos, compactos e bem distribuídos (estilo Reportei) */
+    .k-q{display:none!important}
+    .rr-kpis{gap:20px 12px!important;margin:6px 0 20px!important}
+    .rr-kpis.duo{grid-template-columns:repeat(2,minmax(0,300px))!important;gap:28px!important;margin-bottom:20px!important}
+    .rr-kpi .k-lbl{font-size:11px!important;gap:0!important}
+    .rr-kpi .k-val,.rr-kpi.big .k-val{font-size:19px!important}
+    .rr-kpi .k-row{gap:6px!important;margin-top:5px!important}
+    .rr-delta{font-size:9px!important;padding:2px 5px!important}
+    .rr-kpi .k-prev{font-size:9px!important;margin-top:3px!important}
+    /* cabeçalho e títulos internos proporcionais à folha */
+    .rr-head{margin-bottom:16px!important;gap:10px!important}
+    .rr-logo,.rr-logo svg{width:30px!important;height:30px!important;flex:0 0 30px!important}
+    .rr-head-txt h2{font-size:17px!important}
+    .rr-head-txt .rr-sub{font-size:11px!important}
+    .rr-title{font-size:12.5px!important;margin:16px 0 10px!important}
+    .rr-chart .rr-ctitle{font-size:11px!important}
+    .rr-legend span{font-size:10px!important}
+    /* funil e análise compactos */
+    .rr-fc-lbl{font-size:10px!important;min-height:2.2em!important}
+    .rr-fc-val{font-size:15px!important}
+    .rr-fc-prev{font-size:9px!important}
+    .rr-fc-ratio{font-size:10px!important}
+    .rr-analysis{font-size:11.5px!important;line-height:1.55!important}
+    .rr-analysis h4{font-size:11.5px!important}
+    .rr-ns-title{font-size:12.5px!important}
   `;
   const doc = `<!doctype html><html><head><meta charset="utf-8"><style>${css}\n${fitCss}</style></head><body class="rr-doc">${html}</body></html>`;
   const tmp = path.join(app.getPath("temp"), `rep-${Date.now()}.html`);
