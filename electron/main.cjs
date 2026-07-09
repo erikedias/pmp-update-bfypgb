@@ -2110,18 +2110,27 @@ function metaLeadInfo(actions) {
   return { value: unified, label: "Lead" };
 }
 const metaMsg = (actions) => { const a = (actions || []).find((x) => x.action_type === "onsite_conversion.messaging_conversation_started_7d"); return a ? Number(a.value) : 0; };
+// "Todos os cadastros (leads)" = total unificado (igual ao Reportei), não um tipo só
+function metaLeadsTotal(actions) {
+  const g = (t) => { const a = (actions || []).find((x) => x.action_type === t); return a ? Number(a.value) : 0; };
+  return g("lead") || (g("onsite_conversion.lead_grouped") + g("offsite_conversion.fb_pixel_lead")) || g("leadgen_grouped") || 0;
+}
 
 async function metaReportSection(accountId, start, end, prevStart, prevEnd, name) {
   const tok = readStore().settings.metaToken;
   if (!tok || !accountId) return null;
   const acc = actId(accountId), n = (v) => (v == null || v === "" ? 0 : Number(v));
   const campFields = "campaign_name,impressions,reach,inline_link_clicks,inline_link_click_ctr,frequency,spend,actions";
-  const [camps, campsPrev] = await Promise.all([
-    graphInsights(acc, tok, start, end, { level: "campaign", activeOnly: true, fields: campFields }),
-    graphInsights(acc, tok, prevStart, prevEnd, { level: "campaign", activeOnly: true, fields: "impressions,reach,inline_link_clicks,spend,actions" }).catch(() => []),
+  // TOTAIS a nível de CONTA: reach deduplicado + TODAS as campanhas com veiculação no período (igual ao Reportei).
+  // (somar reach por campanha inflava o alcance; filtrar por "ativa agora" derrubava o total do mês)
+  const accFields = "impressions,reach,inline_link_clicks,spend,actions";
+  const [accCur, accPrev, camps] = await Promise.all([
+    graphInsights(acc, tok, start, end, { fields: accFields }),
+    graphInsights(acc, tok, prevStart, prevEnd, { fields: accFields }).catch(() => []),
+    graphInsights(acc, tok, start, end, { level: "campaign", fields: campFields }).catch(() => []),
   ]);
-  const sum = (rows) => rows.reduce((t, r) => { t.impr += n(r.impressions); t.reach += n(r.reach); t.clk += n(r.inline_link_clicks); t.spend += n(r.spend); t.leads += metaLeadInfo(r.actions).value; t.msg += metaMsg(r.actions); return t; }, { impr: 0, reach: 0, clk: 0, spend: 0, leads: 0, msg: 0 });
-  const T = sum(camps), P = sum(campsPrev);
+  const accRow = (arr) => { const r = (arr && arr[0]) || {}; return { impr: n(r.impressions), reach: n(r.reach), clk: n(r.inline_link_clicks), spend: n(r.spend), leads: metaLeadsTotal(r.actions), msg: metaMsg(r.actions) }; };
+  const T = accRow(accCur), P = accRow(accPrev);
   const cpm = (t) => t.impr ? t.spend / t.impr * 1000 : null, cpc = (t) => t.clk ? t.spend / t.clk : null, ctr = (t) => t.impr ? t.clk / t.impr * 100 : null, freq = (t) => t.reach ? t.impr / t.reach : null, cpl = (t) => t.leads ? t.spend / t.leads : null;
   const kpis = [
     { label: "Impressões Totais", kind: "int", value: T.impr, prev: P.impr },
@@ -2143,12 +2152,12 @@ async function metaReportSection(accountId, start, end, prevStart, prevEnd, name
     { label: "Conversas iniciadas por mensagem", value: _en(T.msg), dir: _dir(T.msg, P.msg) },
     { label: "Todos os cadastros (leads)", value: _en(T.leads), dir: _dir(T.leads, P.leads) },
   ];
-  const rowFrom = (r, nameKey) => { const li = metaLeadInfo(r.actions), spend = n(r.spend), impr = n(r.impressions), reach = n(r.reach); return { name: r[nameKey] || "(sem nome)", impr, reach, cpm: impr ? spend / impr * 1000 : null, ctr: r.inline_link_click_ctr != null ? Number(r.inline_link_click_ctr) : (impr ? n(r.inline_link_clicks) / impr * 100 : null), freq: r.frequency != null ? Number(r.frequency) : (reach ? impr / reach : null), results: li.value, label: li.label, cpr: li.value ? spend / li.value : null, spend }; };
+  const rowFrom = (r, nameKey) => { const results = metaLeadsTotal(r.actions), label = metaLeadInfo(r.actions).label, spend = n(r.spend), impr = n(r.impressions), reach = n(r.reach); return { name: r[nameKey] || "(sem nome)", impr, reach, cpm: impr ? spend / impr * 1000 : null, ctr: r.inline_link_click_ctr != null ? Number(r.inline_link_click_ctr) : (impr ? n(r.inline_link_clicks) / impr * 100 : null), freq: r.frequency != null ? Number(r.frequency) : (reach ? impr / reach : null), results, label, cpr: results ? spend / results : null, spend }; };
   const tblRow = (x) => [{ v: x.name, l: true }, _en(x.impr), _en(x.reach), _brl(x.cpm), _pct(x.ctr), { v: String(x.results), sub: x.label }, { v: _brl(x.cpr), sub: x.label }, _brl(x.spend)];
   const campRows = camps.map((r) => rowFrom(r, "campaign_name")).filter((x) => x.impr > 0).sort((a, b) => b.results - a.results).slice(0, 8);
-  const adsets = await graphInsights(acc, tok, start, end, { level: "adset", activeOnly: true, fields: "adset_name,impressions,reach,inline_link_clicks,inline_link_click_ctr,spend,actions" }).catch(() => []);
+  const adsets = await graphInsights(acc, tok, start, end, { level: "adset", fields: "adset_name,impressions,reach,inline_link_clicks,inline_link_click_ctr,spend,actions" }).catch(() => []);
   const adsetRows = adsets.map((r) => rowFrom(r, "adset_name")).filter((x) => x.impr > 0).sort((a, b) => b.results - a.results).slice(0, 8);
-  const adsRaw = await graphInsights(acc, tok, start, end, { level: "ad", activeOnly: true, fields: "ad_id,ad_name,impressions,reach,inline_link_clicks,inline_link_click_ctr,frequency,spend,actions" }).catch(() => []);
+  const adsRaw = await graphInsights(acc, tok, start, end, { level: "ad", fields: "ad_id,ad_name,impressions,reach,inline_link_clicks,inline_link_click_ctr,frequency,spend,actions" }).catch(() => []);
   const thumbMap = {};
   try { const ads = await httpJson(`${GRAPH}/${acc}/ads?fields=id,creative{thumbnail_url,image_url}&limit=400&access_token=${encodeURIComponent(tok)}`); (ads.data || []).forEach((a) => { const c = a.creative || {}; thumbMap[a.id] = c.thumbnail_url || c.image_url || ""; }); } catch {}
   const adRows = adsRaw.map((r) => { const x = rowFrom(r, "ad_name"); x.thumb = thumbMap[r.ad_id] || ""; return x; }).filter((x) => x.impr > 0).sort((a, b) => b.results - a.results).slice(0, 10);
@@ -2180,7 +2189,7 @@ async function googleReportSection(customerId, start, end, prevStart, prevEnd, n
   if (!s.googleAdsRefreshToken || !customerId) return null;
   const cid = String(customerId).replace(/-/g, ""), headers = await gadsHeaders();
   const q = async (a, b) => {
-    const query = `SELECT campaign.name, metrics.impressions, metrics.clicks, metrics.conversions, metrics.cost_micros, metrics.video_views, metrics.search_top_impression_share FROM campaign WHERE segments.date BETWEEN '${a}' AND '${b}' AND campaign.status = 'ENABLED' AND metrics.impressions > 0`;
+    const query = `SELECT campaign.name, metrics.impressions, metrics.clicks, metrics.conversions, metrics.cost_micros, metrics.video_views, metrics.search_top_impression_share FROM campaign WHERE segments.date BETWEEN '${a}' AND '${b}' AND metrics.impressions > 0`;
     let pt = null, rows = [];
     do { const body = JSON.stringify(pt ? { query, pageToken: pt } : { query }); const r = await googleAdsApi(`customers/${cid}/googleAds:search`, { method: "POST", headers, body }); rows = rows.concat(r.results || []); pt = r.nextPageToken; } while (pt && rows.length < 400);
     return rows;

@@ -1,6 +1,6 @@
 {
-  "version": "1.3.3",
-  "notes": "Relatórios: ícones corretos (Meta, Google Ads, LinkedIn) e análise ponto a ponto (um título por métrica + parágrafo, percorrendo a jornada, depois públicos e anúncios) — sem repetir o modelo, sem traços e corrigido o Google que vinha 'sem dados'.",
+  "version": "1.3.4",
+  "notes": "Correção dos números do relatório (Meta/Google): totais no nível da conta com alcance/frequência deduplicados e TODAS as campanhas que veicularam no período (não só as ativas agora); leads = total unificado 'Todos os cadastros'. Agora bate com o Reportei.",
   "files": [
     "src/app.js",
     "src/engine.js",
