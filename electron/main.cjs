@@ -2172,13 +2172,15 @@ async function metaReportSection(accountId, start, end, prevStart, prevEnd, name
   return {
     platform: "meta", label: "Meta Ads", subtitle: name || "", accent: "#1877f2", kpis, funnel, charts,
     blocks: [
+      { type: "analysis", id: "meta-geral" },
       { type: "title", text: "Campanhas em destaque" },
       { type: "table", cols: [{ label: "Nome da Campanha", l: true }, { label: "Impressões" }, { label: "Alcance" }, { label: "CPM" }, { label: "CTR (Taxa de cliques no link)" }, { label: "Resultados", sort: true }, { label: "Custo por resultados" }, { label: "Valor investido" }], rows: campRows.map(tblRow) },
       { type: "title", text: "Conjunto de anúncios em destaque" },
       { type: "table", cols: [{ label: "Conjunto de anúncio", l: true }, { label: "Impressões" }, { label: "Alcance" }, { label: "CPM" }, { label: "CTR (Taxa de cliques no link)" }, { label: "Resultados", sort: true }, { label: "Custo por resultados" }, { label: "Valor investido" }], rows: adsetRows.map(tblRow) },
-      { type: "analysis", id: "meta" },
+      { type: "analysis", id: "meta-publicos" },
       { type: "title", text: "Anúncios em Destaque" },
       { type: "table", cols: [{ label: "Anúncio", l: true }, { label: "Impressões" }, { label: "Alcance" }, { label: "CPM" }, { label: "CTR (Taxa de cliques no link)" }, { label: "Frequência" }, { label: "Resultados", sort: true }, { label: "Custo por resultados" }, { label: "Valor investido" }], rows: adRows.map(adTblRow) },
+      { type: "analysis", id: "meta-anuncios" },
     ],
     raw: { totals: T, prev: P, campaigns: campRows, adsets: adsetRows, ads: adRows },
   };
@@ -2213,7 +2215,7 @@ async function googleReportSection(customerId, start, end, prevStart, prevEnd, n
   ];
   const rows = cur.map((r) => { const m = M(r.metrics || {}), top = Number((r.metrics || {}).searchTopImpressionShare || 0) * 100; return { name: (r.campaign && r.campaign.name) || "(campanha)", m, top }; }).sort((a, b) => b.m.clk - a.m.clk).slice(0, 20);
   const tbl = { type: "table", cols: [{ label: "Campanhas", l: true }, { label: "Impressões" }, { label: "Cliques", sort: true }, { label: "CTR (Taxa de Cliques)" }, { label: "CPC médio" }, { label: "Conversões" }, { label: "Custo por conversão" }, { label: "% de Anúncios na 1ª posição" }, { label: "Custo" }], rows: rows.map((x) => [{ v: x.name, l: true }, _en(x.m.impr), _en(x.m.clk), _pct(x.m.impr ? x.m.clk / x.m.impr * 100 : null), _brl(x.m.clk ? x.m.cost / x.m.clk : null), _en(x.m.conv), _brl(x.m.conv ? x.m.cost / x.m.conv : null), _pct(x.top), _brl(x.m.cost)]) };
-  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, blocks: [{ type: "analysis", id: "google" }, { type: "title", text: "Todas as Campanhas" }, tbl], raw: { totals: T, prev: P } };
+  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, blocks: [{ type: "analysis", id: "google-geral" }, { type: "title", text: "Todas as Campanhas" }, tbl], raw: { totals: T, prev: P } };
 }
 
 function linkedinReportSection(li, prev, name) {
@@ -2241,7 +2243,7 @@ function linkedinReportSection(li, prev, name) {
   ];
   const camps = (li.rows || []).filter((r) => r.level === "campaign");
   const tbl = { type: "table", cols: [{ label: "Campanha", l: true }, { label: "Envios" }, { label: "Aberturas" }, { label: "Cliques" }, { label: "Leads" }, { label: "CPL" }, { label: "Investido" }], rows: camps.map((r) => { const m = r.metrics || {}, sp = spendOf(m), ld = n(m.leads); return [{ v: r.name, l: true }, _en(n(m.sends)), _en(n(m.opens)), _en(n(m.clicks)), _en(ld), _brl(ld ? sp / ld : null), _brl(sp)]; }) };
-  return { platform: "linkedin", label: "LinkedIn Ads", subtitle: name || "", accent: "#0a66c2", topAccent: true, kpis, funnel, blocks: [{ type: "analysis", id: "linkedin" }, { type: "title", text: "Campanhas" }, tbl], raw: { totals: t, prev: p } };
+  return { platform: "linkedin", label: "LinkedIn Ads", subtitle: name || "", accent: "#0a66c2", topAccent: true, kpis, funnel, blocks: [{ type: "analysis", id: "linkedin-geral" }, { type: "title", text: "Campanhas" }, tbl], raw: { totals: t, prev: p } };
 }
 
 // Seção Meta a partir do dado do Reportei (fallback quando não há conta Meta direta) — sem gráficos/thumbs
@@ -2269,12 +2271,15 @@ function metaLeanFromReportei(li, prev, name) {
     { label: "Todos os cadastros (leads)", value: _en(leads), dir: _dir(leads, P.leads) },
   ];
   const mkTbl = (lvl, label) => { const rows = (li.rows || []).filter((r) => r.level === lvl); if (!rows.length) return null; return { type: "table", cols: [{ label, l: true }, { label: "Impressões" }, { label: "Alcance" }, { label: "CPM" }, { label: "CTR" }, { label: "Leads", sort: true }, { label: "CPL" }, { label: "Investido" }], rows: rows.map((r) => { const m = r.metrics || {}, sp = n(m.spend), i = n(m.impressions), ld = n(m.leads); return [{ v: r.name, l: true }, _en(i), _en(n(m.reach)), _brl(i ? sp / i * 1000 : null), _pct(m.ctr != null ? Number(m.ctr) : (i ? n(m.clicks) / i * 100 : null)), { v: String(ld) }, _brl(ld ? sp / ld : null), _brl(sp)]; }) }; };
-  const blocks = [];
+  const rowsOf = (lvl) => (li.rows || []).filter((r) => r.level === lvl).map((r) => { const m = r.metrics || {}, i = n(m.impressions), c = n(m.clicks), ld = n(m.leads), sp = n(m.spend); return { name: r.name, ctr: m.ctr != null ? Number(m.ctr) : (i ? c / i * 100 : null), results: ld, cpr: ld ? sp / ld : null, spend: sp }; });
+  const audRows = rowsOf("audience"), adRows2 = rowsOf("ad");
+  const blocks = [{ type: "analysis", id: "meta-geral" }];
   const c = mkTbl("campaign", "Campanhas"); if (c) blocks.push({ type: "title", text: "Campanhas em destaque" }, c);
   const a = mkTbl("audience", "Conjunto de anúncio"); if (a) blocks.push({ type: "title", text: "Conjunto de anúncios em destaque" }, a);
-  blocks.push({ type: "analysis", id: "meta" });
+  if (audRows.length) blocks.push({ type: "analysis", id: "meta-publicos" });
   const d = mkTbl("ad", "Anúncio"); if (d) blocks.push({ type: "title", text: "Anúncios em Destaque" }, d);
-  return { platform: "meta", label: "Meta Ads", subtitle: name || "", accent: "#1877f2", kpis, funnel, blocks, raw: { totals: { impr, reach, clk, leads, spend }, prev: { impr: P.impr, leads: P.leads, spend: P.spend } } };
+  if (adRows2.length) blocks.push({ type: "analysis", id: "meta-anuncios" });
+  return { platform: "meta", label: "Meta Ads", subtitle: name || "", accent: "#1877f2", kpis, funnel, blocks, raw: { totals: { impr, reach, clk, leads, spend }, prev: { impr: P.impr, leads: P.leads, spend: P.spend }, adsets: audRows, ads: adRows2 } };
 }
 
 // Seção Google a partir do dado do Reportei (fallback)
@@ -2296,7 +2301,7 @@ function googleLeanFromReportei(li, prev, name) {
   ];
   const camps = (li.rows || []).filter((r) => r.level === "campaign");
   const tbl = { type: "table", cols: [{ label: "Campanhas", l: true }, { label: "Impressões" }, { label: "Cliques", sort: true }, { label: "CTR (Taxa de Cliques)" }, { label: "CPC médio" }, { label: "Conversões" }, { label: "Custo por conversão" }, { label: "Custo" }], rows: camps.map((r) => { const m = r.metrics || {}, i = n(m.impressions), c = n(m.clicks), cv = n(m.conversions), co = n(m.cost != null ? m.cost : m.spend); return [{ v: r.name, l: true }, _en(i), _en(c), _pct(i ? c / i * 100 : null), _brl((m.cpc != null && Number(m.cpc)) ? Number(m.cpc) : (c ? co / c : null)), _en(cv), _brl(cv ? co / cv : null), _brl(co)]; }) };
-  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, blocks: [{ type: "analysis", id: "google" }, { type: "title", text: "Todas as Campanhas" }, tbl], raw: { totals: { impr, clk, conv, cost }, prev: P } };
+  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, blocks: [{ type: "analysis", id: "google-geral" }, { type: "title", text: "Todas as Campanhas" }, tbl], raw: { totals: { impr, clk, conv, cost }, prev: P } };
 }
 
 ipcMain.handle("report:build", async (_e, { projectId, start, end, prevStart, prevEnd }) => {
@@ -2323,7 +2328,9 @@ ipcMain.handle("report:build", async (_e, { projectId, start, end, prevStart, pr
   if (!gDone) { const li = rp(repCur, "google"); if (li) { sections.push(googleLeanFromReportei(li, rp(repPrev, "google"), cname)); if (acc.google) notes.push("Google: usei dados do Reportei (API direta sem retorno)."); } }
   // LINKEDIN — sempre via Reportei
   { const li = rp(repCur, "linkedin"); if (li) sections.push(linkedinReportSection(li, rp(repPrev, "linkedin"), cname)); }
-  return { sections, notes };
+  // esconde plataforma sem veiculação no período (ex.: LinkedIn zerado) — evita seção vazia no relatório
+  const withData = sections.filter((s) => (s.kpis || []).some((k) => Number(k.value) > 0));
+  return { sections: withData, notes };
 });
 
 // Exporta o HTML do relatório em PDF nítido (A4, texto vetorial) via printToPDF

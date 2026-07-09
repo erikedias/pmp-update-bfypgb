@@ -183,7 +183,8 @@
     const accent = d.accent || "#1877f2";
     let inner = `<div class="rr-head"><div class="rr-logo">${LOGO[d.platform] || ""}</div>
       <div class="rr-head-txt"><h2>${esc(d.label)}</h2>${d.subtitle ? `<div class="rr-sub">${esc(d.subtitle)}</div>` : ""}</div>
-      <span class="rr-clock">🕐</span></div>`;
+      <span class="rr-clock">🕐</span>
+      <button type="button" class="rr-remove" title="Remover esta plataforma do relatório">Remover ✕</button></div>`;
     inner += kpiGrid(d.kpis || []);
     if (d.funnel) inner += `<div class="rr-title">Funil ${q()}</div><div class="rr-funnel">${funnelSVG(d.funnel)}</div>`;
     inner += chartsGrid(d.charts);

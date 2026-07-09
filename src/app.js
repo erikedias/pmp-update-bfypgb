@@ -2135,8 +2135,9 @@ async function gerarRelatorio() {
 
 // preenche o bloco de análise de UMA seção (Meta/Google/LinkedIn) com o texto da IA
 async function fillReportAnalysis(sec, cName, monthLabel) {
-  const el = document.querySelector(`#repBody [data-analysis="${sec.platform}"]`);
-  if (!el) return;
+  const sel = (b) => document.querySelector(`#repBody [data-analysis="${sec.platform}-${b}"]`);
+  const geral = sel("geral"), publicos = sel("publicos"), anuncios = sel("anuncios");
+  if (!geral && !publicos && !anuncios) return;
   try {
     const raw = sec.raw || {};
     const pick = (arr) => (arr || []).map((a) => ({ name: a.name, ctr: a.ctr, results: a.results, cpr: a.cpr, spend: a.spend }));
@@ -2145,28 +2146,38 @@ async function fillReportAnalysis(sec, cName, monthLabel) {
       kpis: (sec.kpis || []).map((k) => ({ label: k.label, value: k.value, prev: k.prev, kind: k.kind })),
       adsets: pick(raw.adsets), ads: pick(raw.ads),
     });
-    el.innerHTML = renderAnalysisPoints(txt);
-    el.contentEditable = "true";
+    const points = parseAnalysisPoints(txt);
+    const B = { geral: [], publicos: [], anuncios: [] };
+    points.forEach((pt) => { const t = pt.title.toLowerCase(); if (/p[úu]blico/.test(t)) B.publicos.push(pt); else if (/an[úu]ncio/.test(t)) B.anuncios.push(pt); else B.geral.push(pt); });
+    // se não veio nenhum título de nível, joga tudo no geral
+    const geralArr = B.geral.length || B.publicos.length || B.anuncios.length ? B.geral : points;
+    const put = (el, arr) => { if (!el) return; if (arr.length) { el.innerHTML = pointsToHtml(arr); el.contentEditable = "true"; } else el.remove(); };
+    put(geral, geralArr); put(publicos, B.publicos); put(anuncios, B.anuncios);
   } catch (e) {
-    el.innerHTML = `<span class="rr-ph">⚠️ ${e.message} — <a href="#" class="rep-retry-an" data-p="${sec.platform}">tentar de novo</a></span>`;
-    const a = el.querySelector(".rep-retry-an");
-    if (a) a.addEventListener("click", (ev) => { ev.preventDefault(); el.innerHTML = '<span class="rr-ph">⏳ gerando análise…</span>'; fillReportAnalysis(sec, cName, monthLabel); });
+    if (geral) {
+      geral.innerHTML = `<span class="rr-ph">⚠️ ${e.message} — <a href="#" class="rep-retry-an">tentar de novo</a></span>`;
+      const a = geral.querySelector(".rep-retry-an");
+      if (a) a.addEventListener("click", (ev) => { ev.preventDefault(); geral.innerHTML = '<span class="rr-ph">⏳ gerando análise…</span>'; if (publicos) publicos.setAttribute("data-analysis", `${sec.platform}-publicos`); fillReportAnalysis(sec, cName, monthLabel); });
+    }
+    [publicos, anuncios].forEach((el) => el && el.remove());
   }
 }
 
-// converte "## Título\nparágrafo" (com linhas em branco entre pontos) em <h4>+<p> — o formato ponto a ponto do relatório
-function renderAnalysisPoints(txt) {
-  const esc = (x) => String(x).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+// texto "## Título\nparágrafo" → lista de pontos {title, body}
+function parseAnalysisPoints(txt) {
   const s = String(txt || "").replace(/\r/g, "").replace(/\*\*/g, "").trim();
-  if (!s) return "<p>—</p>";
-  const parts = s.split(/\n(?=\s*##\s)/);
-  let html = "";
-  parts.forEach((p) => {
+  if (!s) return [];
+  const out = [];
+  s.split(/\n(?=\s*##\s)/).forEach((p) => {
     const m = p.match(/^\s*##\s*(.+?)\r?\n([\s\S]*)$/);
-    if (m) html += `<h4>${esc(m[1].trim())}</h4><p>${esc(m[2].trim()).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, " ")}</p>`;
-    else { const t = p.replace(/^\s*##\s*/, "").trim(); if (t) html += `<p>${esc(t).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, " ")}</p>`; }
+    if (m) out.push({ title: m[1].trim(), body: m[2].trim() });
+    else { const t = p.replace(/^\s*##\s*/, "").trim(); if (t) out.push({ title: "", body: t }); }
   });
-  return html || `<p>${esc(s)}</p>`;
+  return out;
+}
+function pointsToHtml(points) {
+  const esc = (x) => String(x).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  return points.map((pt) => `${pt.title ? `<h4>${esc(pt.title)}</h4>` : ""}<p>${esc(pt.body).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, " ")}</p>`).join("");
 }
 
 // exportar o relatório visível em PDF nítido (A4)
@@ -2181,6 +2192,16 @@ $("#pdfRelBtn").addEventListener("click", async () => {
     if (r && r.saved) toast("PDF salvo!");
   } catch (e) { toast("Erro ao gerar PDF: " + e.message, true); }
   finally { btn.textContent = old; btn.disabled = false; }
+});
+
+// remover uma plataforma do relatório (botão ✕ na seção) — some do PDF/cópia junto
+$("#repBody").addEventListener("click", (e) => {
+  const b = e.target.closest(".rr-remove");
+  if (!b) return;
+  const sec = b.closest(".rr-section"); if (!sec) return;
+  sec.remove();
+  const rest = document.querySelectorAll("#repBody .rr-section");
+  if (!rest.length) { $("#pdfRelBtn").classList.add("hidden"); $("#copyRelBtn").classList.add("hidden"); }
 });
 
 // gera (ou regenera) a análise de UMA plataforma e preenche as 3 caixas

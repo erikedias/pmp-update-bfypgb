@@ -99,8 +99,14 @@ table.rr-tbl .r-sub { display: block; font-size: 11px; color: var(--rr-muted); f
 .rr-analysis[contenteditable="true"]:focus { background: #fbfcfe; border-radius: 8px; box-shadow: 0 0 0 2px #e7eefd; padding: 8px; margin: -2px; }
 .rr-ph { color: #9aa4b2; font-style: italic; }
 
+/* -------- botão remover plataforma (não sai no PDF) -------- */
+.rr-remove { margin-left: auto; align-self: flex-start; font-size: 11.5px; font-weight: 600; color: var(--rr-muted); background: #f4f6f8; border: 1px solid var(--rr-card-line); border-radius: 7px; padding: 5px 10px; cursor: pointer; opacity: 0; transition: opacity .12s, color .12s, background .12s; }
+.rr-section:hover .rr-remove { opacity: 1; }
+.rr-remove:hover { color: var(--rr-down); background: var(--rr-down-bg); border-color: #f6cccc; }
+
 @media print {
   .rr-page { max-width: none; padding: 0 24px; }
   .rr-section { break-inside: avoid-page; }
   .rr-charts, .rr-tbl-wrap, .rr-funnel { break-inside: avoid; }
+  .rr-remove, .rr-clock { display: none !important; }
 }
