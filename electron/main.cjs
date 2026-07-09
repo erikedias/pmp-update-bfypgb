@@ -2247,12 +2247,15 @@ function metaLeadsTotal(actions) {
   const g = (t) => { const a = (actions || []).find((x) => x.action_type === t); return a ? Number(a.value) : 0; };
   return g("lead") || (g("onsite_conversion.lead_grouped") + g("offsite_conversion.fb_pixel_lead")) || g("leadgen_grouped") || 0;
 }
+const metaActVal = (actions, t) => { const a = (actions || []).find((x) => x.action_type === t); return a ? Number(a.value) : 0; };
+const metaPurchases = (actions) => metaActVal(actions, "omni_purchase") || metaActVal(actions, "purchase") || metaActVal(actions, "offsite_conversion.fb_pixel_purchase") || 0;
+const metaLpv = (actions) => metaActVal(actions, "landing_page_view");
 
 async function metaReportSection(accountId, start, end, prevStart, prevEnd, name) {
   const tok = readStore().settings.metaToken;
   if (!tok || !accountId) return null;
   const acc = actId(accountId), n = (v) => (v == null || v === "" ? 0 : Number(v));
-  const campFields = "campaign_name,impressions,reach,inline_link_clicks,inline_link_click_ctr,frequency,spend,actions";
+  const campFields = "campaign_name,objective,impressions,reach,inline_link_clicks,inline_link_click_ctr,frequency,spend,actions";
   // TOTAIS a nível de CONTA: reach deduplicado + TODAS as campanhas com veiculação no período (igual ao Reportei).
   // (somar reach por campanha inflava o alcance; filtrar por "ativa agora" derrubava o total do mês)
   const accFields = "impressions,reach,inline_link_clicks,spend,actions";
@@ -2261,7 +2264,7 @@ async function metaReportSection(accountId, start, end, prevStart, prevEnd, name
     graphInsights(acc, tok, prevStart, prevEnd, { fields: accFields }).catch(() => []),
     graphInsights(acc, tok, start, end, { level: "campaign", fields: campFields }).catch(() => []),
   ]);
-  const accRow = (arr) => { const r = (arr && arr[0]) || {}; return { impr: n(r.impressions), reach: n(r.reach), clk: n(r.inline_link_clicks), spend: n(r.spend), leads: metaLeadsTotal(r.actions), msg: metaMsg(r.actions) }; };
+  const accRow = (arr) => { const r = (arr && arr[0]) || {}; return { impr: n(r.impressions), reach: n(r.reach), clk: n(r.inline_link_clicks), spend: n(r.spend), leads: metaLeadsTotal(r.actions), msg: metaMsg(r.actions), purch: metaPurchases(r.actions), lpv: metaLpv(r.actions) }; };
   const T = accRow(accCur), P = accRow(accPrev);
   const cpm = (t) => t.impr ? t.spend / t.impr * 1000 : null, cpc = (t) => t.clk ? t.spend / t.clk : null, ctr = (t) => t.impr ? t.clk / t.impr * 100 : null, freq = (t) => t.reach ? t.impr / t.reach : null, cpl = (t) => t.leads ? t.spend / t.leads : null;
   const kpis = [
@@ -2276,14 +2279,36 @@ async function metaReportSection(accountId, start, end, prevStart, prevEnd, name
     { label: "Custo por Todos os cadastros (leads)", kind: "brl", value: cpl(T), prev: cpl(P), big: true },
     { label: "Valor investido", kind: "brl", value: T.spend, prev: P.spend, big: true },
   ];
+  // Funil: começo fixo (investimento → entrega → clique) + DESFECHO conforme o OBJETIVO das campanhas
+  // (ex.: conta de leads não mostra "conversas por mensagem"; conta de mensagem não força leads)
+  const objectives = camps.map((c) => String(c.objective || "")).filter(Boolean);
+  const anyObj = (re) => objectives.some((o) => re.test(o));
+  const mkStep = (label, cur, prev) => ({ label, value: _en(cur), prev: _en(prev), dir: _dir(cur, prev) });
   const funnel = [
     { label: "Valor investido", value: _brl(T.spend), prev: _brl(P.spend), dir: _dir(T.spend, P.spend) },
     { label: "Impressões Totais", value: _en(T.impr), prev: _en(P.impr), dir: _dir(T.impr, P.impr) },
     { label: "Alcance Total", value: _en(T.reach), prev: _en(P.reach), dir: _dir(T.reach, P.reach) },
     { label: "Total de cliques no link", value: _en(T.clk), prev: _en(P.clk), dir: _dir(T.clk, P.clk) },
-    { label: "Conversas iniciadas por mensagem", value: _en(T.msg), prev: _en(P.msg), dir: _dir(T.msg, P.msg) },
-    { label: "Todos os cadastros (leads)", value: _en(T.leads), prev: _en(P.leads), dir: _dir(T.leads, P.leads) },
   ];
+  // desfechos possíveis, na ORDEM da jornada; só entra se for objetivo da conta E tiver volume
+  const tailDefs = [
+    { re: /TRAFFIC|LINK_CLICKS/, label: "Visualizações da página de destino", cur: T.lpv, prev: P.lpv },
+    { re: /ENGAGEMENT|MESSAGE|CONVERSATION/, label: "Conversas iniciadas por mensagem", cur: T.msg, prev: P.msg },
+    { re: /LEAD/, label: "Todos os cadastros (leads)", cur: T.leads, prev: P.leads },
+    { re: /SALES|CONVERSION|PURCHASE|CATALOG/, label: "Compras", cur: T.purch, prev: P.purch },
+  ];
+  let tailAdded = 0;
+  tailDefs.forEach((d) => { if (anyObj(d.re) && d.cur > 0) { funnel.push(mkStep(d.label, d.cur, d.prev)); tailAdded++; } });
+  // fallback: objetivo não reconhecido (ou insights sem 'objective') → usa o desfecho de MAIOR volume
+  if (!tailAdded) {
+    const best = [
+      { label: "Todos os cadastros (leads)", cur: T.leads, prev: P.leads },
+      { label: "Compras", cur: T.purch, prev: P.purch },
+      { label: "Conversas iniciadas por mensagem", cur: T.msg, prev: P.msg },
+      { label: "Visualizações da página de destino", cur: T.lpv, prev: P.lpv },
+    ].filter((c) => c.cur > 0).sort((a, b) => b.cur - a.cur)[0];
+    if (best) funnel.push(mkStep(best.label, best.cur, best.prev));
+  }
   const rowFrom = (r, nameKey) => { const results = metaLeadsTotal(r.actions), label = metaLeadInfo(r.actions).label, spend = n(r.spend), impr = n(r.impressions), reach = n(r.reach); return { name: r[nameKey] || "(sem nome)", impr, reach, cpm: impr ? spend / impr * 1000 : null, ctr: r.inline_link_click_ctr != null ? Number(r.inline_link_click_ctr) : (impr ? n(r.inline_link_clicks) / impr * 100 : null), freq: r.frequency != null ? Number(r.frequency) : (reach ? impr / reach : null), results, label, cpr: results ? spend / results : null, spend }; };
   const tblRow = (x) => [{ v: x.name, l: true }, _en(x.impr), _en(x.reach), _brl(x.cpm), _pct(x.ctr), { v: String(x.results), sub: x.label }, { v: _brl(x.cpr), sub: x.label }, _brl(x.spend)];
   const campRows = camps.map((r) => rowFrom(r, "campaign_name")).filter((x) => x.impr > 0).sort((a, b) => b.results - a.results).slice(0, 8);
