@@ -184,8 +184,9 @@
   /* ================================ BLOCOS ================================ */
   function kpiCell(k, editable) {
     const fmt = fmtBy[k.kind] || fmtBy.raw;
-    const x = editable ? `<button type="button" class="rr-kpi-x" title="Remover esta métrica do relatório">✕</button>` : "";
-    return `<div class="rr-kpi${k.big ? " big" : ""}" data-metric="${esc(k.label)}">${x}
+    const x = editable ? `<button type="button" class="rr-kpi-x" draggable="false" title="Remover esta métrica do relatório">✕</button>` : "";
+    const drag = editable ? ` draggable="true" title="Arraste para mudar a posição"` : "";
+    return `<div class="rr-kpi${k.big ? " big" : ""}" data-metric="${esc(k.label)}"${drag}>${x}
       <div class="k-lbl">${esc(k.label)} ${q()}</div>
       <div class="k-row"><span class="k-val">${fmt(k.value)}</span>${deltaHTML(k.value, k.prev)}</div>
       ${k.prev != null ? `<div class="k-prev"><b>${fmt(k.prev)}</b> no período anterior</div>` : ""}

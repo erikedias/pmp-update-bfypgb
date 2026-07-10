@@ -2276,6 +2276,7 @@ $("#saveHistRelBtn").addEventListener("click", async () => {
     const clone = doc.cloneNode(true);
     clone.querySelectorAll(".rr-kpi-x,.rr-addmetric-wrap,.rr-metricmenu,.rr-remove,.rr-clock").forEach((el) => el.remove());
     clone.querySelectorAll("[contenteditable]").forEach((el) => el.removeAttribute("contenteditable"));
+    clone.querySelectorAll("[draggable]").forEach((el) => el.removeAttribute("draggable"));
     await window.api.historySave({
       projectId: d.projectId, clientName: d.cName, kind: "report",
       monthLabel: d.monthLabel, title: `Relatório ${d.monthLabel}`,
@@ -2327,6 +2328,39 @@ async function addMetricAnalysis(sec, secData, m) {
     if (g) { if (pts.length) pts.forEach((pt) => appendPoint(g, pt.title || m.label, pt.body)); else appendPoint(g, m.label, String(txt).replace(/^\s*##\s*.*\n?/, "").trim()); }
   } catch (e) { ph.textContent = "⚠️ " + e.message; }
 }
+// arrastar métricas pra mudar a posição (igual o Reportei) — reordena dentro da mesma plataforma
+let repDragEl = null;
+$("#repBody").addEventListener("dragstart", (e) => {
+  if (e.target.closest(".rr-kpi-x")) { e.preventDefault(); return; }
+  const card = e.target.closest('.rr-kpi[draggable="true"]');
+  if (!card) return;
+  repDragEl = card; card.classList.add("rr-dragging");
+  e.dataTransfer.effectAllowed = "move";
+  try { e.dataTransfer.setData("text/plain", ""); } catch {}
+});
+$("#repBody").addEventListener("dragend", () => {
+  if (repDragEl) repDragEl.classList.remove("rr-dragging");
+  repDragEl = null;
+});
+$("#repBody").addEventListener("dragover", (e) => {
+  if (!repDragEl) return;
+  const grid = e.target.closest(".rr-kpis");
+  if (!grid || grid.closest(".rr-section") !== repDragEl.closest(".rr-section")) return;
+  e.preventDefault();
+  const cards = [...grid.querySelectorAll(".rr-kpi:not(.rr-dragging)")];
+  let best = null, bestD = Infinity;
+  for (const el of cards) {
+    const b = el.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+    const d = Math.hypot(e.clientX - cx, e.clientY - cy);
+    if (d < bestD) { bestD = d; best = { el, before: e.clientX < cx }; }
+  }
+  if (!best) grid.appendChild(repDragEl);
+  else grid.insertBefore(repDragEl, best.before ? best.el : best.el.nextSibling);
+  // ao entrar na linha de destaque (duo) o card assume o tamanho daquela linha
+  repDragEl.classList.toggle("big", grid.classList.contains("duo"));
+});
+$("#repBody").addEventListener("drop", (e) => { if (repDragEl) e.preventDefault(); });
+
 $("#repBody").addEventListener("click", (e) => {
   // remover plataforma inteira
   const rb = e.target.closest(".rr-remove");

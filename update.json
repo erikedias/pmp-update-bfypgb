@@ -1,6 +1,6 @@
 {
-  "version": "1.3.16",
-  "notes": "Correções no relatório: (1) some o texto '💡 Modelo: ...' que vazava pra análise do cliente (era o Claude Code seguindo as regras do CLAUDE.md); agora é removido da saída. (2) Gemini vira o motor PRINCIPAL (Claude só como reserva) — mais rápido e sem esse vazamento. (3) O botão 'Adicionar métrica' agora aparece em todas as plataformas (Meta via Reportei, Google, LinkedIn), não só no Meta por API direta — com métricas extras próprias de cada uma.",
+  "version": "1.3.17",
+  "notes": "Agora dá pra ARRASTAR as métricas pra mudar a posição no relatório (igual o Reportei): segure e solte o card onde quiser, dentro da mesma plataforma. Também acabou o espaço em branco: quando sobra métrica na última linha, ela fica centralizada em vez de encostada à esquerda. A ordem escolhida vale no PDF, na cópia e no que for salvo no histórico.",
   "files": [
     "src/app.js",
     "src/engine.js",

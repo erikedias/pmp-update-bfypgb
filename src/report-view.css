@@ -46,8 +46,12 @@
 .rr-head .rr-clock { color: #9aa4b2; font-size: 15px; margin-left: 2px; }
 
 /* -------- grade de KPIs -------- */
-.rr-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px 18px; margin: 8px 0 30px; }
-.rr-kpi { text-align: center; position: relative; }
+/* flex (não grid) pra a ÚLTIMA linha ficar centralizada — sem buraco à direita quando sobra métrica */
+.rr-kpis { display: flex; flex-wrap: wrap; justify-content: center; gap: 26px 18px; margin: 8px 0 30px; }
+.rr-kpi { flex: 0 0 auto; width: calc(25% - 13.5px); text-align: center; position: relative; }
+/* arrastar pra reordenar */
+.rr-kpi[draggable="true"] { cursor: grab; }
+.rr-kpi.rr-dragging { opacity: .4; cursor: grabbing; }
 /* remover métrica (✕ no canto, aparece no hover; some no PDF) */
 .rr-kpi-x { position: absolute; top: -7px; right: 4px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--rr-card-line); background: #fff; color: var(--rr-muted); font-size: 10px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .12s, color .12s, background .12s; padding: 0; z-index: 2; }
 .rr-kpi:hover .rr-kpi-x { opacity: 1; }
@@ -71,7 +75,8 @@
 .rr-kpi .k-prev { font-size: 11.5px; color: var(--rr-muted); margin-top: 5px; }
 .rr-kpi .k-prev b { color: var(--rr-ink-2); font-weight: 700; }
 /* linha de KPIs "grandes" centralizados (ex.: Custo por leads + Valor investido) */
-.rr-kpis.duo { grid-template-columns: repeat(2, minmax(0, 340px)); justify-content: center; gap: 40px; margin-bottom: 34px; }
+.rr-kpis.duo { gap: 40px; margin-bottom: 34px; }
+.rr-kpis.duo .rr-kpi { width: 300px; }
 
 /* -------- títulos de seção internos -------- */
 .rr-title { text-align: center; font-size: 15px; font-weight: 800; color: var(--rr-ink-2); margin: 34px 0 18px; display: flex; align-items: center; justify-content: center; gap: 6px; }
@@ -161,7 +166,9 @@ table.rr-tbl .r-sub { display: block; font-size: 11px; color: var(--rr-muted); f
   /* KPIs compactos e do MESMO tamanho (estilo Reportei); "?" some no PDF */
   .k-q { display: none !important; }
   .rr-kpis { gap: 20px 12px; margin: 6px 0 20px; }
-  .rr-kpis.duo { grid-template-columns: repeat(2, minmax(0, 300px)); gap: 28px; margin-bottom: 20px; }
+  .rr-kpi { width: calc(25% - 9px); }
+  .rr-kpis.duo { gap: 28px; margin-bottom: 20px; }
+  .rr-kpis.duo .rr-kpi { width: 260px; }
   .rr-kpi .k-lbl { font-size: 11px; }
   .rr-kpi .k-val, .rr-kpi.big .k-val { font-size: 19px; }
   .rr-kpi .k-row { gap: 6px; margin-top: 5px; }

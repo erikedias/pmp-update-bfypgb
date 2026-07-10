@@ -2580,7 +2580,9 @@ ipcMain.handle("report:exportPdf", async (_e, { html, title }) => {
     /* KPIs no PDF: MESMO tamanho pra todos, compactos e bem distribuídos (estilo Reportei) */
     .k-q{display:none!important}
     .rr-kpis{gap:20px 12px!important;margin:6px 0 20px!important}
-    .rr-kpis.duo{grid-template-columns:repeat(2,minmax(0,300px))!important;gap:28px!important;margin-bottom:20px!important}
+    .rr-kpi{width:calc(25% - 9px)!important}
+    .rr-kpis.duo{gap:28px!important;margin-bottom:20px!important}
+    .rr-kpis.duo .rr-kpi{width:260px!important}
     .rr-kpi .k-lbl{font-size:11px!important;gap:0!important}
     .rr-kpi .k-val,.rr-kpi.big .k-val{font-size:19px!important}
     .rr-kpi .k-row{gap:6px!important;margin-top:5px!important}
