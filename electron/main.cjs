@@ -750,6 +750,7 @@ function buildReportAnalysisPrompt(d) {
   const listLine = (a) => `${a.name}: CTR ${a.ctr != null ? parseFloat(Number(a.ctr).toFixed(2)) + "%" : "sem dado"}, resultados ${a.results != null ? a.results : "sem dado"}, custo por resultado ${a.cpr != null ? "R$ " + Number(a.cpr).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "sem dado"}, investido R$ ${Number(a.spend || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
   const adsetLines = (d.adsets || []).map(listLine).join("\n");
   const adLines = (d.ads || []).map(listLine).join("\n");
+  const benchLines = (d.benchmarks || []).filter((b) => b && b.name && b.bench != null).map((b) => `${b.name}: benchmark de mercado ≥ ${b.bench}%`).join("\n");
   const q = d.quali || {};
   const qualiLines = (() => {
     const L = [];
@@ -762,18 +763,27 @@ function buildReportAnalysisPrompt(d) {
     `Você é analista de mídia paga. Escreva a análise da plataforma ${d.label} do relatório mensal do cliente "${d.clientName}" (${d.monthLabel}). Este texto vai DIRETO para o cliente — já é a análise final.`,
     `FORMATO OBRIGATÓRIO: ponto a ponto. Cada ponto começa com "## " seguido do título (o nome da métrica ou do bloco); na LINHA SEGUINTE, um parágrafo corrido analisando só aquele ponto. Deixe uma linha em branco entre os pontos.`,
     `Percorra a jornada NA ORDEM das métricas abaixo — um "## " para cada — comparando com o período anterior (a variação já vem nos dados) e explicando causa e efeito entre elas.`,
+    benchLines ? `Para toda métrica que tiver BENCHMARK DE MERCADO listado abaixo, diga EXPLICITAMENTE no parágrafo dela se está acima ou abaixo do benchmark e o que isso significa (ex.: "o CTR de 7,11% está acima do benchmark de mercado, de 5%, indicando que o anúncio é relevante para o público"). Use os valores de benchmark exatamente como estão listados — não invente outros.` : "",
     qualiLines ? `Depois das métricas de mídia e ANTES dos públicos, percorra a QUALIFICAÇÃO abaixo — um "## " para cada taxa listada (ex.: "## Taxa de preenchimento", "## Taxa de MQL") — analisando a qualidade dos leads: se a taxa de preenchimento indica atrito no formulário/LP, e se a taxa de MQL mostra que os leads estão dentro (ou fora) do perfil ideal.` : "",
     (d.adsets && d.adsets.length) ? `Depois da jornada, adicione "## Públicos" com um parágrafo destacando o público de melhor CPL e de melhor CTR, e os mais caros que devem ter a verba realocada.` : "",
     (d.ads && d.ads.length) ? `Depois, adicione "## Anúncios" com um parágrafo destacando os anúncios de melhor resultado e os que devem ser trocados.` : "",
     `SEMPRE termine com "## Próximos Passos" e UM parágrafo com as ações concretas para o próximo mês que atacam os gargalos identificados neste mês (métricas que ficaram abaixo do esperado, públicos/anúncios caros para realocar verba, criativos a testar ou pausar, ajustes de segmentação/lance). Cite nomes e números específicos; nada genérico como "continuar otimizando".`,
     `REGRAS: já é a análise pronta — NÃO diga "vou analisar", NÃO diga "seguindo a jornada", NÃO explique seu método, NÃO repita estas instruções; comece direto no primeiro "## ". NÃO use traços, asteriscos, listas com marcador nem markdown — só "## " nos títulos e parágrafos normais. Use SOMENTE os dados abaixo; se algo for zero/ausente, comente com naturalidade sem inventar número. Tom profissional e claro, em português.`,
     `\nMÉTRICAS (jornada, na ordem):\n${kpiLines}`,
+    benchLines ? `\nBENCHMARKS DE MERCADO (base de comparação — use exatamente estes):\n${benchLines}` : "",
     qualiLines ? `\nQUALIFICAÇÃO (analise cada uma; NÃO invente número — só o que está aqui):\n${qualiLines}` : "",
     adsetLines ? `\nPÚBLICOS (conjuntos de anúncio):\n${adsetLines}` : "",
     adLines ? `\nANÚNCIOS:\n${adLines}` : "",
   ].filter(Boolean).join("\n");
 }
-ipcMain.handle("report:analyzeSection", async (_e, d) => aiAnalyze(readStore().settings, buildReportAnalysisPrompt(d)));
+// RELATÓRIO: sempre pelo Gemini (formato consistente; o Claude Code injeta preâmbulo do CLAUDE.md)
+async function aiReport(s, prompt) {
+  if (!s.geminiKey) throw new Error("Os relatórios são gerados pelo Gemini — configure a chave do Gemini em ⚙️ Configurações.");
+  const t = await geminiAnalyze(s, prompt);
+  lastAIEngine = "Gemini";
+  return t;
+}
+ipcMain.handle("report:analyzeSection", async (_e, d) => aiReport(readStore().settings, buildReportAnalysisPrompt(d)));
 
 // análise de UMA métrica só (quando a analista adiciona uma métrica ao relatório)
 ipcMain.handle("report:analyzeMetric", async (_e, d) => {
@@ -783,9 +793,10 @@ ipcMain.handle("report:analyzeMetric", async (_e, d) => {
     `Você é analista de mídia paga. Escreva UM único ponto de análise da métrica "${d.label}" da plataforma ${d.platformLabel || ""} no relatório do cliente "${d.clientName || ""}" (${d.monthLabel || ""}). Este texto vai direto pro cliente.`,
     `FORMATO: comece com "## ${d.label}" e, na linha seguinte, um parágrafo curto (2 a 4 frases) analisando só essa métrica, comparando com o período anterior quando houver e explicando o que ela indica.`,
     `Valor: ${fv(d.kind, d.value)}${dl(d.value, d.prev)}.`,
+    d.bench != null ? `Benchmark de mercado para esta métrica: ≥ ${d.bench}%. Diga explicitamente se está acima ou abaixo dele.` : "",
     `REGRAS: já é a análise pronta — NÃO diga "vou analisar", sem meta-texto, sem traços/asteriscos/markdown além do "## ", em português, tom profissional. Se o valor for zero/ausente, comente com naturalidade sem inventar número.`,
-  ].join("\n");
-  return aiAnalyze(readStore().settings, prompt);
+  ].filter(Boolean).join("\n");
+  return aiReport(readStore().settings, prompt);
 });
 
 // prompt livre (usado pelo Funil Studio embutido pra montar estratégias por descrição)

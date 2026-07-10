@@ -1,6 +1,6 @@
 {
-  "version": "1.3.17",
-  "notes": "Agora dá pra ARRASTAR as métricas pra mudar a posição no relatório (igual o Reportei): segure e solte o card onde quiser, dentro da mesma plataforma. Também acabou o espaço em branco: quando sobra métrica na última linha, ela fica centralizada em vez de encostada à esquerda. A ordem escolhida vale no PDF, na cópia e no que for salvo no histórico.",
+  "version": "1.3.18",
+  "notes": "Relatórios: (1) agora são SEMPRE gerados pelo Gemini (não caem mais no Claude, que injetava texto do modelo e mudava o formato). (2) A análise passa a citar os BENCHMARKS DE MERCADO como base — pra cada métrica com benchmark (CTR, taxa de preenchimento, taxa de conversão, taxa de abertura…) o texto diz explicitamente se está acima ou abaixo do benchmark. Usa os benchmarks padrão do app + os overrides por cliente (botão 'benchmarks' em Configurações).",
   "files": [
     "src/app.js",
     "src/engine.js",

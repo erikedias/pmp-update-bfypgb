@@ -2202,7 +2202,7 @@ async function gerarRelatorio() {
       return;
     }
     ReportView.renderInto(body, resp.sections, { editable: true });
-    state.repDoc = { cName, monthLabel, projectId, sections: resp.sections };
+    state.repDoc = { cName, monthLabel, projectId, benchmarks: repCli.benchmarks || {}, sections: resp.sections };
     $("#copyRelBtn").classList.remove("hidden"); $("#pdfRelBtn").classList.remove("hidden"); $("#saveHistRelBtn").classList.remove("hidden");
     if ((resp.notes || []).length) console.warn("[relatório]", resp.notes.join(" | "));
     // preenche a análise de cada seção (Gemini/Claude) — em paralelo
@@ -2214,6 +2214,18 @@ async function gerarRelatorio() {
 }
 
 // preenche o bloco de análise de UMA seção (Meta/Google/LinkedIn) com o texto da IA
+// benchmarks de mercado da plataforma: padrão do engine + override do cliente do relatório
+function repBenchList(platform) {
+  const plat = E.PLATFORMS && E.PLATFORMS[platform];
+  if (!plat || !plat.funnel) return [];
+  const ov = ((state.repDoc || {}).benchmarks || {})[platform] || {};
+  return plat.funnel.map((f) => ({ name: f.name, bench: (ov[f.name] != null ? ov[f.name] : f.bench) }));
+}
+function repBenchOf(platform, label) {
+  const L = String(label || "").toLowerCase();
+  const hit = repBenchList(platform).find((b) => L.includes(b.name.toLowerCase()) || b.name.toLowerCase().includes(L));
+  return hit ? hit.bench : null;
+}
 async function fillReportAnalysis(sec, cName, monthLabel) {
   const sel = (b) => document.querySelector(`#repBody [data-analysis="${sec.platform}-${b}"]`);
   const geral = sel("geral"), publicos = sel("publicos"), anuncios = sel("anuncios"), proximos = sel("proximos");
@@ -2226,6 +2238,7 @@ async function fillReportAnalysis(sec, cName, monthLabel) {
       clientName: cName, monthLabel, label: sec.label,
       kpis: (sec.kpis || []).map((k) => ({ label: k.label, value: k.value, prev: k.prev, kind: k.kind })),
       adsets: pick(raw.adsets), ads: pick(raw.ads), quali: sec.quali || null,
+      benchmarks: repBenchList(sec.platform),
     });
     const points = parseAnalysisPoints(txt);
     const B = { geral: [], publicos: [], anuncios: [], proximos: [] };
@@ -2322,7 +2335,8 @@ async function addMetricAnalysis(sec, secData, m) {
   const ph = document.createElement("p"); ph.className = "rr-ph"; ph.textContent = "⏳ analisando " + m.label + "…";
   if (g) g.appendChild(ph);
   try {
-    const txt = await window.api.reportAnalyzeMetric({ clientName: d.cName, monthLabel: d.monthLabel, platformLabel: secData ? secData.label : "", label: m.label, kind: m.kind, value: m.value, prev: m.prev });
+    const plat = secData ? secData.platform : (sec.querySelector(".rr-addmetric") || {}).dataset?.platform;
+    const txt = await window.api.reportAnalyzeMetric({ clientName: d.cName, monthLabel: d.monthLabel, platformLabel: secData ? secData.label : "", label: m.label, kind: m.kind, value: m.value, prev: m.prev, bench: plat ? repBenchOf(plat, m.label) : null });
     const pts = parseAnalysisPoints(txt);
     if (ph.parentNode) ph.remove();
     if (g) { if (pts.length) pts.forEach((pt) => appendPoint(g, pt.title || m.label, pt.body)); else appendPoint(g, m.label, String(txt).replace(/^\s*##\s*.*\n?/, "").trim()); }
