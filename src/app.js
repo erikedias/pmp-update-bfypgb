@@ -2342,8 +2342,19 @@ async function addMetricAnalysis(sec, secData, m) {
     if (g) { if (pts.length) pts.forEach((pt) => appendPoint(g, pt.title || m.label, pt.body)); else appendPoint(g, m.label, String(txt).replace(/^\s*##\s*.*\n?/, "").trim()); }
   } catch (e) { ph.textContent = "⚠️ " + e.message; }
 }
-// arrastar métricas pra mudar a posição (igual o Reportei) — reordena dentro da mesma plataforma
-let repDragEl = null;
+// número em pt-BR ou en-US → Number ("1.512,54"→1512.54, "197,28"→197.28, "197.28"→197.28)
+function parseNumLoose(s) {
+  s = String(s == null ? "" : s).trim().replace(/[R$%\s]/g, "");
+  if (!s) return null;
+  if (s.includes(",") && s.includes(".")) s = s.replace(/\./g, "").replace(",", ".");
+  else if (s.includes(",")) s = s.replace(",", ".");
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+// arrastar métricas pra mudar a posição (igual o Reportei) — um marcador mostra onde vai cair
+let repDragEl = null, repDropMark = null;
+function repMark() { if (!repDropMark) { repDropMark = document.createElement("div"); repDropMark.className = "rr-drop-mark"; } return repDropMark; }
+function repClearMark() { if (repDropMark && repDropMark.parentNode) repDropMark.parentNode.removeChild(repDropMark); }
 $("#repBody").addEventListener("dragstart", (e) => {
   if (e.target.closest(".rr-kpi-x")) { e.preventDefault(); return; }
   const card = e.target.closest('.rr-kpi[draggable="true"]');
@@ -2354,26 +2365,35 @@ $("#repBody").addEventListener("dragstart", (e) => {
 });
 $("#repBody").addEventListener("dragend", () => {
   if (repDragEl) repDragEl.classList.remove("rr-dragging");
-  repDragEl = null;
+  repClearMark(); repDragEl = null;
 });
 $("#repBody").addEventListener("dragover", (e) => {
   if (!repDragEl) return;
   const grid = e.target.closest(".rr-kpis");
-  if (!grid || grid.closest(".rr-section") !== repDragEl.closest(".rr-section")) return;
+  if (!grid || grid.closest(".rr-section") !== repDragEl.closest(".rr-section")) { repClearMark(); return; }
   e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
   const cards = [...grid.querySelectorAll(".rr-kpi:not(.rr-dragging)")];
+  const mark = repMark();
   let best = null, bestD = Infinity;
   for (const el of cards) {
     const b = el.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
     const d = Math.hypot(e.clientX - cx, e.clientY - cy);
     if (d < bestD) { bestD = d; best = { el, before: e.clientX < cx }; }
   }
-  if (!best) grid.appendChild(repDragEl);
-  else grid.insertBefore(repDragEl, best.before ? best.el : best.el.nextSibling);
-  // ao entrar na linha de destaque (duo) o card assume o tamanho daquela linha
-  repDragEl.classList.toggle("big", grid.classList.contains("duo"));
+  if (!best) grid.appendChild(mark);
+  else grid.insertBefore(mark, best.before ? best.el : best.el.nextSibling);
 });
-$("#repBody").addEventListener("drop", (e) => { if (repDragEl) e.preventDefault(); });
+$("#repBody").addEventListener("drop", (e) => {
+  if (!repDragEl) return;
+  e.preventDefault();
+  if (repDropMark && repDropMark.parentNode) {
+    const grid = repDropMark.parentNode;
+    grid.insertBefore(repDragEl, repDropMark);
+    repDragEl.classList.toggle("big", grid.classList.contains("duo"));
+  }
+  repClearMark();
+});
 
 $("#repBody").addEventListener("click", (e) => {
   // remover plataforma inteira
@@ -2394,7 +2414,7 @@ $("#repBody").addEventListener("click", (e) => {
     if (sec && label) stripMetricPoint(sec, label);
     return;
   }
-  // abrir/fechar menu de adicionar métrica
+  // abrir/fechar menu de adicionar métrica (extras + personalizada)
   const ab = e.target.closest(".rr-addmetric");
   if (ab) {
     const sec = ab.closest(".rr-section");
@@ -2404,15 +2424,47 @@ $("#repBody").addEventListener("click", (e) => {
     const extra = (secData && secData.extraMetrics) || [];
     const shown = new Set([...sec.querySelectorAll(".rr-kpi")].map((k) => k.dataset.metric));
     const avail = extra.filter((m) => !shown.has(m.label));
-    if (!avail.length) { toast("Sem métricas extras disponíveis pra esta plataforma.", true); return; }
     const menu = document.createElement("div"); menu.className = "rr-metricmenu";
-    menu.innerHTML = avail.map((m, i) => `<button type="button" data-mi="${i}">➕ ${m.label}</button>`).join("");
+    menu.innerHTML = avail.map((m, i) => `<button type="button" data-mi="${i}">➕ ${m.label}</button>`).join("") + `<button type="button" class="rr-metric-custom">✏️ Métrica personalizada</button>`;
     menu._avail = avail;
     ab.parentElement.after(menu);
     return;
   }
-  // escolher uma métrica do menu
-  const mb = e.target.closest(".rr-metricmenu button");
+  // abrir o formulário de métrica personalizada
+  const cb = e.target.closest(".rr-metric-custom");
+  if (cb) {
+    const menu = cb.closest(".rr-metricmenu");
+    menu.innerHTML = `<div class="rr-metricform">
+      <input type="text" class="mf-label" placeholder="Nome da métrica (ex.: Reuniões agendadas)">
+      <input type="text" class="mf-value" placeholder="Valor (ex.: 12 ou 197,28)">
+      <select class="mf-kind"><option value="int">Número</option><option value="brl">R$</option><option value="pct">%</option><option value="num2">Decimal</option></select>
+      <input type="text" class="mf-prev" placeholder="Anterior (opcional)">
+      <button type="button" class="mf-add">Adicionar</button>
+    </div>`;
+    const lbl = menu.querySelector(".mf-label"); if (lbl) lbl.focus();
+    return;
+  }
+  // confirmar a métrica personalizada
+  const fa = e.target.closest(".mf-add");
+  if (fa) {
+    const menu = fa.closest(".rr-metricmenu"), sec = menu.closest(".rr-section");
+    const label = menu.querySelector(".mf-label").value.trim();
+    const kind = menu.querySelector(".mf-kind").value;
+    const value = parseNumLoose(menu.querySelector(".mf-value").value);
+    const prevRaw = menu.querySelector(".mf-prev").value.trim();
+    const prev = prevRaw ? parseNumLoose(prevRaw) : null;
+    if (!label || value == null) { toast("Preencha o nome e um valor numérico.", true); return; }
+    const platform = (sec.querySelector(".rr-addmetric") || {}).dataset ? sec.querySelector(".rr-addmetric").dataset.platform : null;
+    const secData = ((state.repDoc || {}).sections || []).find((s) => s.platform === platform);
+    const m = { label, kind, value, prev };
+    menu.remove();
+    const grid = sec.querySelector(".rr-kpis");
+    if (grid) { const tmp = document.createElement("div"); tmp.innerHTML = ReportView.kpiCardHtml(m, true); grid.appendChild(tmp.firstElementChild); }
+    addMetricAnalysis(sec, secData, m);
+    return;
+  }
+  // escolher uma métrica extra do menu (só botões com índice)
+  const mb = e.target.closest(".rr-metricmenu button[data-mi]");
   if (mb) {
     const menu = mb.closest(".rr-metricmenu"), sec = menu.closest(".rr-section");
     const platform = (sec.querySelector(".rr-addmetric") || {}).dataset ? sec.querySelector(".rr-addmetric").dataset.platform : null;

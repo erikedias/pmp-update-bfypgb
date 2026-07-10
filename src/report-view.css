@@ -51,7 +51,9 @@
 .rr-kpi { flex: 0 0 auto; width: calc(25% - 13.5px); text-align: center; position: relative; }
 /* arrastar pra reordenar */
 .rr-kpi[draggable="true"] { cursor: grab; }
-.rr-kpi.rr-dragging { opacity: .4; cursor: grabbing; }
+.rr-kpi.rr-dragging { opacity: .35; cursor: grabbing; }
+/* marcador de posição (só aparece durante o arraste — "onde a métrica vai cair") */
+.rr-drop-mark { flex: 0 0 4px; align-self: stretch; min-height: 64px; border-radius: 3px; background: var(--rr-accent, var(--rr-meta)); box-shadow: 0 0 8px rgba(24, 119, 242, .45); }
 /* remover métrica (✕ no canto, aparece no hover; some no PDF) */
 .rr-kpi-x { position: absolute; top: -7px; right: 4px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--rr-card-line); background: #fff; color: var(--rr-muted); font-size: 10px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .12s, color .12s, background .12s; padding: 0; z-index: 2; }
 .rr-kpi:hover .rr-kpi-x { opacity: 1; }
@@ -63,6 +65,14 @@
 .rr-metricmenu { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 8px; grid-column: 1 / -1; }
 .rr-metricmenu button { font-size: 11.5px; color: var(--rr-ink-2); background: #f4f6f8; border: 1px solid var(--rr-card-line); border-radius: 7px; padding: 5px 9px; cursor: pointer; }
 .rr-metricmenu button:hover { background: #eef2ff; border-color: var(--rr-accent, var(--rr-meta)); color: var(--rr-accent, var(--rr-meta)); }
+.rr-metric-custom { border-style: dashed !important; }
+/* formulário de métrica personalizada */
+.rr-metricform { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; grid-column: 1 / -1; }
+.rr-metricform input, .rr-metricform select { font-size: 12px; padding: 6px 8px; border: 1px solid var(--rr-card-line); border-radius: 7px; color: var(--rr-ink); background: #fff; outline: none; }
+.rr-metricform input:focus, .rr-metricform select:focus { border-color: var(--rr-accent, var(--rr-meta)); }
+.rr-metricform .mf-label { min-width: 190px; }
+.rr-metricform .mf-value, .rr-metricform .mf-prev { width: 130px; }
+.rr-metricform .mf-add { font-size: 12px; font-weight: 700; color: #fff; background: var(--rr-accent, var(--rr-meta)); border: 0; border-radius: 7px; padding: 7px 14px; cursor: pointer; }
 .rr-kpi .k-lbl { font-size: 13px; font-weight: 700; color: var(--rr-ink-2); display: inline-flex; align-items: center; gap: 5px; justify-content: center; }
 .rr-kpi .k-q { width: 15px; height: 15px; border-radius: 50%; background: #eef1f5; color: #9aa4b2; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
 .rr-kpi .k-row { margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
