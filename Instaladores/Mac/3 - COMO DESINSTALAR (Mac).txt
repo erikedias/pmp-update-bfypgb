@@ -1,0 +1,33 @@
+========================================
+  COMO DESINSTALAR NO MAC
+========================================
+
+1) Se o app estiver aberto, feche ele:
+   menu "Painel de Mídia Paga" (canto superior esquerdo) → "Sair".
+   (Se estiver travado: aperte Command ⌘ + Option ⌥ + Esc, selecione
+    o app e clique em "Forçar Encerrar".)
+
+2) Abra a pasta "Aplicativos".
+
+3) Arraste "Painel de Mídia Paga" para a Lixeira
+   (ou botão direito → "Mover para o Lixo").
+
+4) Esvazie a Lixeira. Pronto, o app saiu.
+
+----------------------------------------
+LIMPAR TAMBÉM AS CONFIGURAÇÕES (opcional)
+----------------------------------------
+Se quiser apagar 100% (contas, clientes salvos), remova a pasta de
+dados. No Finder:
+
+1) Menu "Ir" (barra de cima) → segure a tecla Option (⌥) →
+   clique em "Biblioteca".
+2) Abra a pasta "Application Support".
+3) Apague a pasta "Painel Midia Paga".
+   (⚠️ isso apaga suas configurações — só faça se quiser zerar tudo)
+
+----------------------------------------
+"NÃO DEIXA ARRASTAR PRA LIXEIRA / DIZ QUE ESTÁ EM USO"
+----------------------------------------
+• Confirme que o app está fechado (passo 1).
+• Se persistir, reinicie o Mac e tente arrastar pra Lixeira de novo.

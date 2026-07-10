@@ -1,6 +1,6 @@
 {
-  "version": "1.3.20",
-  "notes": "Métricas do relatório agora ficam todas numa grade única — dá pra arrastar e posicionar qualquer métrica em qualquer lugar livremente (inclusive puxar as de baixo, tipo CPL e Valor investido, pra cima). Antes elas ficavam numa linha separada de 'destaque' que travava o reposicionamento.",
+  "version": "1.3.21",
+  "notes": "O app agora se ATUALIZA SOZINHO ao abrir: se houver versão nova no GitHub, ele baixa e reinicia automaticamente (telinha 'Atualizando o app…'). Assim todos os usuários passam a receber as mudanças sem precisar clicar em nada. Também reestruturei a pasta de Instaladores (Windows e Mac separados) com passo a passo de instalar, autorizar no Mac e desinstalar.",
   "files": [
     "src/app.js",
     "src/engine.js",

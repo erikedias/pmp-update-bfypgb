@@ -1,0 +1,37 @@
+========================================
+  PAINEL DE MÍDIA PAGA — INSTALAÇÃO
+========================================
+
+Bem-vinda(o)! Aqui estão os instaladores do app, separados por sistema.
+
+👉 Use a pasta do SEU computador:
+
+   📁 Windows  →  se você usa Windows (PC)
+   📁 Mac      →  se você usa Mac (Apple)
+
+Dentro de cada pasta tem:
+   • o instalador do app
+   • um passo a passo de COMO INSTALAR
+   • um passo a passo de COMO DESINSTALAR (se um dia quiser tirar)
+
+No Mac tem também um arquivo extra:
+   • "AUTORIZAR NO MAC" — o Mac pede uma autorização na primeira vez,
+     e esse arquivo ensina a liberar em 30 segundos. É simples.
+
+----------------------------------------
+IMPORTANTE — ATUALIZAÇÕES
+----------------------------------------
+O app se ATUALIZA SOZINHO. Toda vez que você abre, ele checa se tem
+novidade e já se atualiza automaticamente (aparece uma telinha
+"Atualizando o app…" por alguns segundos e ele reinicia). Você não
+precisa baixar nada de novo — instala uma vez só.
+
+Se por acaso ele não atualizar sozinho (internet lenta, etc.), dá pra
+forçar em: ⚙️ Configurações → "Verificar atualização".
+
+----------------------------------------
+DÚVIDAS?
+----------------------------------------
+Depois de instalar, abra o app e vá em ⚙️ Configurações para conectar
+suas contas (Gemini, Meta, Google Ads, Reportei etc.). O arquivo
+CONFIGURACAO.md explica cada uma.

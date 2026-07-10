@@ -1,0 +1,24 @@
+========================================
+  COMO INSTALAR NO MAC  (passo 1 de 2)
+========================================
+
+1) Dê dois cliques no arquivo:
+      "Painel de Midia Paga - Instalador Mac.dmg"
+   (está aqui nesta mesma pasta)
+
+2) Vai abrir uma janela com o ícone do app e uma pasta "Applications".
+   → Arraste o ícone "Painel de Mídia Paga" PARA CIMA da pasta
+     "Applications" (Aplicativos). Isso instala o app.
+
+3) Feche essa janela e "ejete" o disco (o ícone que apareceu na área
+   de trabalho / no Finder): botão direito → Ejetar.
+
+4) Abra o app pelo Launchpad ou pela pasta Aplicativos.
+
+⚠️ IMPORTANTE: na PRIMEIRA vez, o Mac provavelmente vai BLOQUEAR o app
+   (mensagem tipo "não é possível abrir" ou "app danificado").
+   Isso é NORMAL — o app é interno, não passou pela loja da Apple.
+
+   👉 Agora abra o arquivo:
+      "2 - AUTORIZAR NO MAC (importante).txt"
+   e siga o passo a passo pra liberar. Leva 30 segundos.

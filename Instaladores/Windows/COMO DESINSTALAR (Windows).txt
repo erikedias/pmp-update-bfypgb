@@ -1,0 +1,42 @@
+========================================
+  COMO DESINSTALAR NO WINDOWS
+========================================
+
+Jeito mais fácil:
+
+1) Feche o app (se estiver aberto).
+
+2) Clique no Menu Iniciar e digite:  Painel de Mídia Paga
+
+3) Clique com o botão DIREITO em cima do app e escolha "Desinstalar".
+   (Ou: Configurações do Windows → Aplicativos → Aplicativos instalados →
+    procure "Painel de Mídia Paga" → botão "..." → Desinstalar)
+
+4) Confirme. Pronto, o app foi removido.
+
+----------------------------------------
+SE NÃO ENCONTRAR NO MENU / QUISER LIMPAR TUDO
+----------------------------------------
+Às vezes o atalho some mas resta a pasta. Para limpar 100%:
+
+1) Aperte as teclas:  Windows + R
+2) Escreva isto e dê Enter:
+      %LOCALAPPDATA%\Programs
+3) Abra a pasta "Painel Midia Paga" (ou parecido).
+4) Se tiver um arquivo "Uninstall Painel de Mídia Paga.exe", clique nele
+   para desinstalar. Se não tiver, pode apagar a pasta inteira.
+
+Para apagar também suas configurações salvas (contas, clientes):
+1) Aperte:  Windows + R
+2) Escreva e dê Enter:
+      %APPDATA%\Painel Midia Paga
+3) Apague essa pasta.
+   (⚠️ isso apaga suas configurações — só faça se quiser começar do zero)
+
+----------------------------------------
+"NÃO CONSIGO DESINSTALAR / DIZ QUE ESTÁ EM USO"
+----------------------------------------
+• Feche o app primeiro (clique no X).
+• Se continuar, abra o Gerenciador de Tarefas (Ctrl + Shift + Esc),
+  procure "Painel de Mídia Paga", clique nele e em "Finalizar tarefa".
+• Depois desinstale normalmente.

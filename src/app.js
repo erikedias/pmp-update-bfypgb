@@ -132,8 +132,30 @@ document.addEventListener("click", (e) => {
   renderRepMonth();
   updateNavHint();
   renderSemana(); // aba inicial
-  try { const u = await window.api.updateCheck(); $("#appVersion").textContent = "v" + (u.local || "?"); } catch {}
+  // atualização automática ao abrir: se houver versão nova no GitHub, baixa e reinicia sozinho
+  try {
+    const u = await window.api.updateCheck();
+    $("#appVersion").textContent = "v" + (u.local || "?");
+    if (u.hasUpdate && u.files && u.files.length) {
+      showUpdateOverlay(u.latest);
+      try { await window.api.updateApply({ base: u.base, files: u.files, version: u.latest }); }
+      catch (e) { hideUpdateOverlay(); toast("Não consegui atualizar automaticamente (" + e.message + "). Tente em ⚙️ Configurações.", true); }
+    }
+  } catch {}
 })();
+function showUpdateOverlay(v) {
+  let el = document.getElementById("updateOverlay");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "updateOverlay";
+    el.style.cssText = "position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(10,14,20,.94);color:#e6edf5;text-align:center;padding:40px;font-family:inherit";
+    el.innerHTML = '<div style="font-size:42px">⏳</div><div style="font-size:17px"><b>Atualizando o app…</b></div><div id="updOvV" style="opacity:.75;font-size:13px"></div><div style="opacity:.6;font-size:12px;max-width:380px;line-height:1.5">Baixando a versão mais recente. O app vai reiniciar sozinho em alguns segundos — não feche.</div>';
+    document.body.appendChild(el);
+  }
+  const vv = document.getElementById("updOvV"); if (vv) vv.textContent = v ? ("para a versão " + v) : "";
+  el.style.display = "flex";
+}
+function hideUpdateOverlay() { const el = document.getElementById("updateOverlay"); if (el) el.style.display = "none"; }
 
 /* ---------------- atualização do app (patch leve) ---------------- */
 $("#updateCheckBtn").addEventListener("click", async () => {

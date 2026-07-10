@@ -1,0 +1,34 @@
+========================================
+  COMO INSTALAR NO WINDOWS
+========================================
+
+1) Dê dois cliques no arquivo:
+      "Painel de Midia Paga - Instalador Windows.exe"
+   (está aqui nesta mesma pasta)
+
+2) Pode aparecer uma tela azul do Windows dizendo
+   "O Windows protegeu o seu computador".
+   → Clique em "Mais informações"
+   → Depois clique em "Executar assim mesmo"
+   (isso acontece porque o app é interno, não é vírus)
+
+3) Escolha onde instalar (pode deixar o padrão) e clique em "Instalar".
+
+4) Ao terminar, o app abre sozinho. Também fica no Menu Iniciar
+   como "Painel de Mídia Paga".
+
+----------------------------------------
+PRONTO!
+----------------------------------------
+Na primeira vez que abrir, ele pode se atualizar sozinho (uma telinha
+"Atualizando o app…" aparece por alguns segundos). É normal — deixe
+terminar.
+
+Depois, vá em ⚙️ Configurações para conectar suas contas.
+
+----------------------------------------
+NÃO ABRE? / TRAVOU?
+----------------------------------------
+• Feche tudo e abra de novo pelo Menu Iniciar.
+• Se pedir permissão de administrador, pode permitir.
+• Persistindo, desinstale (veja "COMO DESINSTALAR") e instale de novo.

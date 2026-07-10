@@ -1,0 +1,47 @@
+========================================
+  AUTORIZAR NO MAC  (passo 2 de 2)
+========================================
+
+O Mac bloqueia apps que não vêm da App Store. Como este é um app
+interno, você precisa liberar UMA vez. Escolha um dos jeitos:
+
+════════════════════════════════════════
+JEITO 1 — o mais simples (tente primeiro)
+════════════════════════════════════════
+
+1) Abra a pasta "Aplicativos".
+2) Clique com o botão DIREITO em "Painel de Mídia Paga".
+3) Escolha "Abrir".
+4) Vai aparecer um aviso — clique de novo em "Abrir".
+
+Pronto! A partir daí ele abre normal (dois cliques), sempre.
+
+════════════════════════════════════════
+JEITO 2 — se aparecer "app está danificado" ou o Jeito 1 não funcionar
+════════════════════════════════════════
+
+Vamos rodar UM comando no Terminal. É seguro — ele só remove a
+"trava" que o Mac colocou no app.
+
+1) Abra o Terminal:
+   • Aperte  Command (⌘) + barra de espaço
+   • Escreva:  Terminal
+   • Aperte Enter
+
+2) COPIE a linha abaixo INTEIRA (é uma linha só):
+
+xattr -cr "/Applications/Painel Midia Paga.app"
+
+3) COLE no Terminal (Command ⌘ + V) e aperte Enter.
+   (não vai aparecer nada escrito — é assim mesmo, deu certo)
+
+4) Feche o Terminal e abra o app normalmente pela pasta Aplicativos.
+
+⚠️ Atenção ao nome: dentro das aspas é "Painel Midia Paga.app"
+   (SEM acento e SEM o "de"). É o nome real do arquivo do app.
+
+════════════════════════════════════════
+AINDA BLOQUEADO?
+════════════════════════════════════════
+Vá em: Ajustes do Sistema → Privacidade e Segurança → role até o final →
+onde diz que o app foi bloqueado, clique em "Abrir Assim Mesmo".
