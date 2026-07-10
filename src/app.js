@@ -2388,9 +2388,7 @@ $("#repBody").addEventListener("drop", (e) => {
   if (!repDragEl) return;
   e.preventDefault();
   if (repDropMark && repDropMark.parentNode) {
-    const grid = repDropMark.parentNode;
-    grid.insertBefore(repDragEl, repDropMark);
-    repDragEl.classList.toggle("big", grid.classList.contains("duo"));
+    repDropMark.parentNode.insertBefore(repDragEl, repDropMark);
   }
   repClearMark();
 });

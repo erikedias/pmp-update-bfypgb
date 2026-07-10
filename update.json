@@ -1,6 +1,6 @@
 {
-  "version": "1.3.19",
-  "notes": "Arrastar métricas ficou mais preciso: agora aparece um marcador (barrinha) mostrando EXATAMENTE onde a métrica vai cair enquanto você arrasta — some ao soltar, não é uma linha fixa. E dá pra adicionar MÉTRICA PERSONALIZADA: em 'Adicionar métrica' → 'Métrica personalizada', você digita o nome, o valor (número, R$ ou %), opcionalmente o valor anterior, e ela entra no relatório com análise gerada automaticamente.",
+  "version": "1.3.20",
+  "notes": "Métricas do relatório agora ficam todas numa grade única — dá pra arrastar e posicionar qualquer métrica em qualquer lugar livremente (inclusive puxar as de baixo, tipo CPL e Valor investido, pra cima). Antes elas ficavam numa linha separada de 'destaque' que travava o reposicionamento.",
   "files": [
     "src/app.js",
     "src/engine.js",

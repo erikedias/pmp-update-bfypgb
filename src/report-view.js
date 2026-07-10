@@ -194,10 +194,9 @@
   }
   function kpiGrid(kpis, opts, d) {
     opts = opts || {}; const ed = opts.editable;
-    const main = kpis.filter((k) => !k.big), big = kpis.filter((k) => k.big);
-    let html = `<div class="rr-kpis">${main.map((k) => kpiCell(k, ed)).join("")}</div>`;
-    if (big.length) html += `<div class="rr-kpis duo">${big.map((k) => kpiCell(k, ed)).join("")}</div>`;
-    if (ed && d && (d.extraMetrics || []).length) html += `<div class="rr-addmetric-wrap"><button type="button" class="rr-addmetric" data-platform="${esc(d.platform)}">➕ Adicionar métrica</button></div>`;
+    // grade ÚNICA: qualquer métrica pode ser posicionada em qualquer lugar (arraste livre, de baixo pra cima)
+    let html = `<div class="rr-kpis">${kpis.map((k) => kpiCell(k, ed)).join("")}</div>`;
+    if (ed) html += `<div class="rr-addmetric-wrap"><button type="button" class="rr-addmetric" data-platform="${esc(d ? d.platform : "")}">➕ Adicionar métrica</button></div>`;
     return html;
   }
 
