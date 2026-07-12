@@ -1,33 +1,57 @@
-# 🔄 Como publicar uma atualização (patch) pros usuários
+# 🔄 Como as atualizações chegam nos usuários
 
-O app tem um botão **"Verificar atualização"** (⚙️ Configurações) que baixa só os arquivos
-de código que mudaram, do seu **repositório no GitHub**, e reinicia — sem reinstalar o app de 90MB.
+O app se **atualiza sozinho**. Toda vez que um usuário abre o app, ele checa o
+**repositório no GitHub** (`erikedias/pmp-update-bfypgb`); se tiver versão nova, baixa
+só os arquivos que mudaram, mostra a telinha *"Atualizando o app…"* e reinicia. O usuário
+não precisa fazer nada — instala uma vez e recebe tudo automaticamente.
 
-## Configuração única (uma vez)
+> Se por acaso não atualizar sozinho (internet lenta), dá pra forçar em
+> ⚙️ Configurações → **Verificar atualização**.
 
-1. Crie um repositório no **GitHub** (pode ser privado? NÃO — precisa ser **público** pra os apps baixarem os arquivos "raw"). Ex.: `painel-midia-paga`.
-2. Suba TODO o projeto pra esse repositório (a pasta com `electron/`, `src/`, `update.json` etc.).
-3. Pegue o link "raw" base do repo. Formato:
-   ```
-   https://raw.githubusercontent.com/SEU-USUARIO/SEU-REPO/main
-   ```
-   (troque `main` por `master` se for o nome do seu branch)
-4. **Esse link você cola em cada app** (⚙️ Configurações → "Link de atualização") OU me passa que eu já deixo embutido por padrão pra todos.
+⚠️ **Exceção:** um app instalado de um instalador ANTIGO (anterior à v1.3.21) ainda não
+tem o auto-update na abertura. Nesse caso, o usuário precisa clicar **uma vez** em
+"Verificar atualização"; a partir daí passa a ser automático. Por isso vale distribuir o
+instalador mais novo (veja `Instaladores/`).
 
-## Pra publicar uma atualização (toda vez que mudar algo relevante)
+## Para PUBLICAR uma atualização (o que a Erik/Claude faz)
 
-1. Faça a mudança no código (você mesma ou pelo Claude).
-2. Abra o **`update.json`** e:
-   - **suba o número da versão** (ex.: `0.1.0` → `0.1.1`)
-   - escreva uma nota curta em `notes` (ex.: "corrigido erro X, novo botão Y")
-   - se mudou algum arquivo que **não** está na lista `files`, adicione o caminho dele
-3. Suba (commit + push) pro GitHub. Pelo Claude é só pedir: *"faz commit e push das mudanças"*.
-4. Pronto. Cada usuário, ao clicar em **"Verificar atualização"**, vê a nova versão e atualiza num clique.
+Fluxo pela linha de comando (é o que o Claude roda):
+
+```bash
+cd painel-midia-paga
+# 1) sobe o número da versão (patch) no package.json
+node -e "const fs=require('fs');const p=require('./package.json');const v=p.version.split('.').map(Number);v[2]++;p.version=v.join('.');fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');console.log(p.version)"
+# 2) gera o manifesto (varre src/ + electron/ + package.json; arquivos novos entram sozinhos)
+node scripts/gen-update.js "nota curta do que mudou"
+# 3) commit + push pro GitHub
+git add -A && git commit -m "vX.Y.Z — descrição" && git push origin main
+```
+
+Pelo Claude é só pedir: *"publica a atualização"*. Pronto — na próxima vez que cada
+usuário abrir o app, ele já pega.
 
 ## Detalhes
-- A versão "atual" de cada app é guardada localmente; quando o `update.json` tiver versão maior, aparece o botão de atualizar.
-- O patch cobre os arquivos do **painel** (o grosso das mudanças). Se você mexer no **Funil Studio** (pasta `src/funil-studio/`, que é compilada), aí é melhor distribuir o instalador novo — mudanças nele são raras.
-- Os arquivos são baixados do seu repo e gravados na pasta do app. Como o app é instalado na área do usuário, não precisa de senha de administrador.
+
+- A versão instalada fica guardada localmente; quando o `update.json` do GitHub tiver
+  versão maior, o app baixa e aplica.
+- `asar: false` no build → os arquivos do app ficam soltos e podem ser sobrescritos pelo
+  auto-update (por isso funciona no app instalado, não só no modo dev).
+- O patch cobre `src/` + `electron/` + `package.json`. Se mexer no **Funil Studio**
+  (`src/funil-studio/`, que é compilado à parte), aí sim é melhor gerar um instalador novo.
+- O app é instalado na área do usuário → o auto-update não precisa de senha de administrador.
+
+## Gerar instaladores novos (quando precisar)
+
+Só é necessário de vez em quando (ex.: pra quem instala do zero já pegar a versão atual):
+
+```bash
+npm run dist        # gera .dmg (Mac) + .exe (Windows) na pasta dist/
+```
+
+Depois, copie os arquivos gerados para `Instaladores/Mac/` e `Instaladores/Windows/`
+(renomeando para "Painel de Midia Paga - Instalador Mac.dmg" e
+"Painel de Midia Paga - Instalador Windows.exe").
 
 ## Resumo do dia a dia
-> Mudou algo → bump no `update.json` → push no GitHub → todo mundo clica "Verificar atualização". ✅
+> Mudou algo → **"publica a atualização"** (bump + gen-update.js + push) → todo mundo
+> pega sozinho ao abrir. ✅
