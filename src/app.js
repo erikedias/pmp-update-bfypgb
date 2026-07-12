@@ -2457,7 +2457,9 @@ function parseNumLoose(s) {
 let repDragEl = null, repDropMark = null;
 function repMark() { if (!repDropMark) { repDropMark = document.createElement("div"); repDropMark.className = "rr-drop-mark"; } return repDropMark; }
 function repClearMark() { if (repDropMark && repDropMark.parentNode) repDropMark.parentNode.removeChild(repDropMark); }
-$("#repBody").addEventListener("dragstart", (e) => {
+// vincula todos os handlers de edição a um container (#repBody OU o container do histórico)
+function bindReportEditing(root) {
+  root.addEventListener("dragstart", (e) => {
   if (e.target.closest(".rr-kpi-x")) { e.preventDefault(); return; }
   const card = e.target.closest('.rr-kpi[draggable="true"]');
   if (!card) return;
@@ -2465,11 +2467,11 @@ $("#repBody").addEventListener("dragstart", (e) => {
   e.dataTransfer.effectAllowed = "move";
   try { e.dataTransfer.setData("text/plain", ""); } catch {}
 });
-$("#repBody").addEventListener("dragend", () => {
+root.addEventListener("dragend", () => {
   if (repDragEl) repDragEl.classList.remove("rr-dragging");
   repClearMark(); repDragEl = null;
 });
-$("#repBody").addEventListener("dragover", (e) => {
+root.addEventListener("dragover", (e) => {
   if (!repDragEl) return;
   const grid = e.target.closest(".rr-kpis");
   if (!grid || grid.closest(".rr-section") !== repDragEl.closest(".rr-section")) { repClearMark(); return; }
@@ -2486,7 +2488,7 @@ $("#repBody").addEventListener("dragover", (e) => {
   if (!best) grid.appendChild(mark);
   else grid.insertBefore(mark, best.before ? best.el : best.el.nextSibling);
 });
-$("#repBody").addEventListener("drop", (e) => {
+root.addEventListener("drop", (e) => {
   if (!repDragEl) return;
   e.preventDefault();
   if (repDropMark && repDropMark.parentNode) {
@@ -2495,7 +2497,7 @@ $("#repBody").addEventListener("drop", (e) => {
   repClearMark();
 });
 
-$("#repBody").addEventListener("click", (e) => {
+root.addEventListener("click", (e) => {
   // remover plataforma inteira
   const rb = e.target.closest(".rr-remove");
   if (rb) {
@@ -2577,7 +2579,34 @@ $("#repBody").addEventListener("click", (e) => {
     addMetricAnalysis(sec, secData, m);
     return;
   }
-});
+  });
+}
+bindReportEditing($("#repBody"));
+
+// re-adiciona os controles de edição (arraste, ✕ remover, ➕ adicionar) a um relatório carregado do histórico
+function enableReportEditingDom(root) {
+  root.querySelectorAll(".rr-section").forEach((sec) => {
+    const anaEl = sec.querySelector("[data-analysis]");
+    const platform = anaEl ? (anaEl.getAttribute("data-analysis").split("-")[0] || "") : "";
+    sec.querySelectorAll(".rr-kpi").forEach((card) => {
+      card.setAttribute("draggable", "true");
+      card.setAttribute("title", "Arraste para mudar a posição");
+      if (!card.querySelector(".rr-kpi-x")) {
+        const x = document.createElement("button");
+        x.type = "button"; x.className = "rr-kpi-x"; x.setAttribute("draggable", "false");
+        x.title = "Remover esta métrica do relatório"; x.textContent = "✕";
+        card.insertBefore(x, card.firstChild);
+      }
+    });
+    const grid = sec.querySelector(".rr-kpis");
+    if (grid && !sec.querySelector(".rr-addmetric-wrap")) {
+      const wrap = document.createElement("div");
+      wrap.className = "rr-addmetric-wrap";
+      wrap.innerHTML = `<button type="button" class="rr-addmetric" data-platform="${platform}">➕ Adicionar métrica</button>`;
+      grid.after(wrap);
+    }
+  });
+}
 
 // gera (ou regenera) a análise de UMA plataforma e preenche as 3 caixas
 async function genRepPlatform(i) {
@@ -2753,6 +2782,11 @@ async function openHistory(id) {
         <span style="font-size:12px;color:var(--muted)">✏️ Clique nos textos da análise para editar antes de exportar.</span>
       </div>
       <div class="rr-doc" id="histRepDoc" style="border:1px solid var(--line);border-radius:12px;overflow:hidden">${h.html || "<i>sem conteúdo</i>"}</div>`;
+    // habilita a edição completa (textos + remover/adicionar/arrastar métricas), igual no relatório novo
+    const cli = state.clients.find((c) => c.projectId === h.projectId) || {};
+    state.repDoc = { cName: h.clientName, monthLabel: h.monthLabel, projectId: h.projectId, benchmarks: cli.benchmarks || {}, sections: [], fromHistory: h.id };
+    const histContainer = $("#histRepDoc");
+    if (histContainer) { enableReportEditingDom(histContainer); bindReportEditing(histContainer); }
     const docEl = () => $("#histRepDoc .rr-page") || $("#histRepDoc");
     const pb = $("#histRepPdf");
     if (pb) pb.addEventListener("click", async () => {
