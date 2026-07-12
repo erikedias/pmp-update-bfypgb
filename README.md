@@ -10,22 +10,26 @@ Funil Studio (mapa mental) e mais. **Tudo roda local** — suas chaves ficam só
 
 ## 📥 Instalar (usar o app)
 
-### Mac
-1. Abra o **`.dmg`** (pasta `Instaladores/`) e arraste o app pra **Aplicações**
-2. **1ª vez — IMPORTANTE:** NÃO dê dois cliques. Clique com o **botão direito (ou Control+clique) no app → Abrir** → na janela, **Abrir** de novo.
-3. Se aparecer **"está danificado / mover para o Lixo"** (Macs mais novos bloqueiam apps sem assinatura paga da Apple), faça uma vez:
-   - Abra o **Terminal** (Spotlight → "Terminal") e cole:
-     ```
-     xattr -cr "/Applications/Painel Midia Paga.app"
-     ```
-   - Aperte Enter e abra o app normalmente. Isso só precisa ser feito **uma vez**.
+**Baixe o instalador do seu sistema** (sempre a versão mais nova):
+👉 https://github.com/erikedias/pmp-update-bfypgb/releases/latest
 
-> O app é seguro — esse aviso é só porque ele não tem o certificado pago da Apple ($99/ano). O comando acima apenas tira a "quarentena" que o macOS coloca em downloads.
+- **Mac (Apple Silicon):** o arquivo `.dmg`
+- **Windows:** o arquivo `.exe`
 
-### Windows
-1. Rode o instalador **`Painel de Mídia Paga Setup.exe`**
-2. Avance a instalação → abra pelo atalho
-3. Se o Windows Defender avisar (app sem assinatura): **Mais informações → Executar assim mesmo**
+O passo a passo completo (com telas) está na pasta **`Instaladores/`**, separado por sistema:
+- `Instaladores/Windows/` — instalar e desinstalar
+- `Instaladores/Mac/` — instalar, **autorizar no Mac** (o Mac pede uma liberação na 1ª vez) e desinstalar
+
+### Resumo rápido
+
+**Mac:** abra o `.dmg`, arraste o app pra Aplicações. Na 1ª vez, botão direito → **Abrir**. Se disser "está danificado", rode uma vez no Terminal:
+```
+xattr -cr "/Applications/Painel Midia Paga.app"
+```
+
+**Windows:** rode o `.exe`. Se o Defender avisar: **Mais informações → Executar assim mesmo**.
+
+> 🔄 **Instala uma vez só.** Depois disso o app **se atualiza sozinho ao abrir** — toda mudança que a Erik publica chega automaticamente. (Se algum dia não atualizar sozinho: ⚙️ Configurações → "Verificar atualização".)
 
 Depois de abrir, vá em **⚙️ Configurações** e siga o [CONFIGURACAO.md](CONFIGURACAO.md).
 
