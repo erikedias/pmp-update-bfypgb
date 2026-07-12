@@ -1,6 +1,6 @@
 {
-  "version": "1.3.21",
-  "notes": "O app agora se ATUALIZA SOZINHO ao abrir: se houver versão nova no GitHub, ele baixa e reinicia automaticamente (telinha 'Atualizando o app…'). Assim todos os usuários passam a receber as mudanças sem precisar clicar em nada. Também reestruturei a pasta de Instaladores (Windows e Mac separados) com passo a passo de instalar, autorizar no Mac e desinstalar.",
+  "version": "1.3.22",
+  "notes": "Relatórios em MASSA: botão 'Gerar vários' → marque os clientes → gera o relatório de cada um (com análise) e salva no Histórico do cliente automaticamente. E os relatórios no Histórico agora são EDITÁVEIS: você abre, clica nos textos da análise pra ajustar, clica em 'Salvar alterações' (fica salva a última versão) e depois 'Exportar PDF' pra mandar pro cliente.",
   "files": [
     "src/app.js",
     "src/engine.js",

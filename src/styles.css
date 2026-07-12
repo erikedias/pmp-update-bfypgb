@@ -316,3 +316,12 @@ tr.term-bad{background:rgba(255,107,107,.06)}
 /* zona de colar imagem (⌘V / Ctrl+V) — reutilizável em qualquer aba */
 .img-paste{border:1px dashed var(--line);border-radius:12px;padding:12px;transition:border-color .15s,background .15s;outline:none}
 .img-paste:focus,.img-paste.paste-ready{border-color:var(--accent);background:rgba(25,227,162,.05)}
+
+/* geração de relatórios em massa */
+.bulk-panel{max-width:820px}
+.bulk-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:4px 14px;margin-top:4px}
+.bulk-cli{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer;font-size:14px}
+.bulk-cli:hover{background:var(--panel-2)}
+.bulk-cli input{cursor:pointer}
+.bulk-row{padding:8px 4px;border-bottom:1px solid var(--line);font-size:14px}
+.bulk-row:last-child{border-bottom:0}

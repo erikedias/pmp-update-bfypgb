@@ -2235,21 +2235,105 @@ async function gerarRelatorio() {
   }
 }
 
+// período (mês atual do seletor) → datas do mês e do mês anterior
+function reportPeriod(ms) {
+  const { y, m } = ms;
+  const pPrev = new Date(y, m - 2, 1), py = pPrev.getFullYear(), pm = pPrev.getMonth() + 1;
+  return { start: `${y}-${pad(m)}-01`, end: iso(new Date(y, m, 0)), prevStart: `${py}-${pad(pm)}-01`, prevEnd: iso(new Date(py, pm, 0)), monthLabel: monthLabelOf(y, m) };
+}
+// HTML do relatório pronto pra salvar: tira os controles de edição (botões/arraste) mas MANTÉM
+// os textos editáveis (contenteditable) pra poder revisar depois no histórico
+function reportHtmlForSave(pageEl) {
+  const clone = pageEl.cloneNode(true);
+  clone.querySelectorAll(".rr-kpi-x,.rr-addmetric-wrap,.rr-metricmenu,.rr-remove,.rr-clock,.rr-drop-mark").forEach((el) => el.remove());
+  clone.querySelectorAll("[draggable]").forEach((el) => el.removeAttribute("draggable"));
+  return `<div class="rr-page">${clone.innerHTML}</div>`;
+}
+
+// GERAÇÃO EM MASSA: gera o relatório de vários clientes e salva cada um no histórico
+async function bulkGenerateReports(ids) {
+  const body = $("#repBody");
+  ["copyRelBtn", "pdfRelBtn", "saveHistRelBtn"].forEach((b) => $("#" + b).classList.add("hidden"));
+  const per = reportPeriod(state.repMonth);
+  const nameOf = (pid) => (state.clients.find((c) => c.projectId === pid) || {}).name || ("Cliente " + pid);
+  const status = ids.map((pid) => ({ pid, name: nameOf(pid), st: "wait", msg: "" }));
+  const ico = { wait: "•", run: "⏳", ok: "✅", empty: "—", err: "⚠️" };
+  const render = () => {
+    body.innerHTML = `<div class="bulk-panel"><div class="section-title">📚 Gerando relatórios — ${per.monthLabel}</div>
+      <div class="bulk-list">${status.map((s) => `<div class="bulk-row">${ico[s.st]} ${s.name}${s.msg ? ` <span style="color:var(--muted);font-size:12px">— ${s.msg}</span>` : ""}</div>`).join("")}</div>
+      <div id="bulkDone"></div></div>`;
+  };
+  render();
+  const stage = document.createElement("div");
+  stage.style.cssText = "position:absolute;left:-99999px;top:0;width:1180px";
+  document.body.appendChild(stage);
+  for (const s of status) {
+    s.st = "run"; render();
+    try {
+      const resp = await window.api.reportBuild({ projectId: s.pid, start: per.start, end: per.end, prevStart: per.prevStart, prevEnd: per.prevEnd });
+      if (!resp.sections || !resp.sections.length) { s.st = "empty"; s.msg = "sem dados no mês"; render(); continue; }
+      stage.innerHTML = "";
+      ReportView.renderInto(stage, resp.sections, { editable: true });
+      const cli = state.clients.find((c) => c.projectId === s.pid) || {};
+      await Promise.all(resp.sections.map((sec) => fillReportAnalysis(sec, s.name, per.monthLabel, { root: stage, benchmarks: cli.benchmarks || {} })));
+      const pageEl = stage.querySelector(".rr-page");
+      await window.api.historySave({ projectId: s.pid, clientName: s.name, kind: "report", monthLabel: per.monthLabel, title: `Relatório ${per.monthLabel}`, html: reportHtmlForSave(pageEl) });
+      s.st = "ok"; render();
+    } catch (e) { s.st = "err"; s.msg = e.message; render(); }
+  }
+  stage.remove();
+  const okN = status.filter((s) => s.st === "ok").length;
+  const dn = $("#bulkDone");
+  if (dn) {
+    dn.innerHTML = `<div class="warnbar" style="margin-top:16px;background:rgba(25,227,162,.07);border-color:rgba(25,227,162,.3);color:#7be8c0">✅ <b>${okN}</b> relatório(s) salvos no Histórico. Abra o <b>Histórico</b> de cada cliente pra revisar, editar os textos e exportar o PDF.</div>
+      <button class="btn btn-ghost" id="bulkToHist" style="margin-top:12px">🗂️ Ir para o Histórico</button>`;
+    const b = $("#bulkToHist"); if (b) b.addEventListener("click", () => $('.nav .tab[data-view="historico"]').click());
+  }
+}
+
+// abre o painel de seleção de clientes pra geração em massa
+function showBulkPicker() {
+  const body = $("#repBody");
+  ["copyRelBtn", "pdfRelBtn", "saveHistRelBtn"].forEach((b) => $("#" + b).classList.add("hidden"));
+  const rows = (state.clients || []).map((c) => `<label class="bulk-cli"><input type="checkbox" class="bulk-ck" value="${c.projectId}"> ${c.name || ("Cliente " + c.projectId)}</label>`).join("");
+  body.innerHTML = `<div class="bulk-panel">
+    <div class="section-title">📚 Gerar relatórios em massa — ${monthLabelOf(state.repMonth.y, state.repMonth.m)}</div>
+    <p class="sub">Marque os clientes. Cada um é gerado com a análise e <b>salvo no Histórico</b> do cliente. Depois você abre no Histórico, revisa, edita os textos e exporta o PDF. (O mês é o selecionado ali em cima.)</p>
+    <label style="display:block;margin:6px 0 10px"><input type="checkbox" id="bulkAll"> <b>Selecionar todos</b></label>
+    <div class="bulk-list">${rows || '<div class="sub">Nenhum cliente cadastrado.</div>'}</div>
+    <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" id="bulkGoBtn">Gerar e salvar no histórico</button><button class="btn btn-ghost" id="bulkCancelBtn">Cancelar</button></div>
+  </div>`;
+  const all = $("#bulkAll"); if (all) all.addEventListener("change", (e) => $$(".bulk-ck").forEach((c) => { c.checked = e.target.checked; }));
+  $("#bulkCancelBtn").addEventListener("click", () => { body.innerHTML = '<div class="state"><div class="big">📄</div>Escolha o cliente e o mês e clique em <b>Gerar relatório</b>.</div>'; });
+  $("#bulkGoBtn").addEventListener("click", () => {
+    const ids = [...$$(".bulk-ck")].filter((c) => c.checked).map((c) => Number(c.value));
+    if (!ids.length) { toast("Marque ao menos um cliente.", true); return; }
+    if (!window.confirm(`Gerar ${ids.length} relatório(s) de ${monthLabelOf(state.repMonth.y, state.repMonth.m)} e salvar no histórico? Pode levar alguns minutos.`)) return;
+    bulkGenerateReports(ids);
+  });
+}
+const bulkBtn = document.getElementById("bulkRelBtn");
+if (bulkBtn) bulkBtn.addEventListener("click", showBulkPicker);
+
 // preenche o bloco de análise de UMA seção (Meta/Google/LinkedIn) com o texto da IA
 // benchmarks de mercado da plataforma: padrão do engine + override do cliente do relatório
-function repBenchList(platform) {
+function repBenchList(platform, benchmarks) {
   const plat = E.PLATFORMS && E.PLATFORMS[platform];
   if (!plat || !plat.funnel) return [];
-  const ov = ((state.repDoc || {}).benchmarks || {})[platform] || {};
+  const ov = (benchmarks || (state.repDoc || {}).benchmarks || {})[platform] || {};
   return plat.funnel.map((f) => ({ name: f.name, bench: (ov[f.name] != null ? ov[f.name] : f.bench) }));
 }
-function repBenchOf(platform, label) {
+function repBenchOf(platform, label, benchmarks) {
   const L = String(label || "").toLowerCase();
-  const hit = repBenchList(platform).find((b) => L.includes(b.name.toLowerCase()) || b.name.toLowerCase().includes(L));
+  const hit = repBenchList(platform, benchmarks).find((b) => L.includes(b.name.toLowerCase()) || b.name.toLowerCase().includes(L));
   return hit ? hit.bench : null;
 }
-async function fillReportAnalysis(sec, cName, monthLabel) {
-  const sel = (b) => document.querySelector(`#repBody [data-analysis="${sec.platform}-${b}"]`);
+// opts.root = container onde o relatório foi renderizado (default #repBody); opts.benchmarks = override do cliente
+async function fillReportAnalysis(sec, cName, monthLabel, opts) {
+  opts = opts || {};
+  const root = opts.root || document.getElementById("repBody");
+  if (!root) return;
+  const sel = (b) => root.querySelector(`[data-analysis="${sec.platform}-${b}"]`);
   const geral = sel("geral"), publicos = sel("publicos"), anuncios = sel("anuncios"), proximos = sel("proximos");
   if (!geral && !publicos && !anuncios && !proximos) return;
   const dropBox = (el) => { if (el) (el.closest(".rr-nextsteps") || el).remove(); };
@@ -2260,7 +2344,7 @@ async function fillReportAnalysis(sec, cName, monthLabel) {
       clientName: cName, monthLabel, label: sec.label,
       kpis: (sec.kpis || []).map((k) => ({ label: k.label, value: k.value, prev: k.prev, kind: k.kind })),
       adsets: pick(raw.adsets), ads: pick(raw.ads), quali: sec.quali || null,
-      benchmarks: repBenchList(sec.platform),
+      benchmarks: repBenchList(sec.platform, opts.benchmarks),
     });
     const points = parseAnalysisPoints(txt);
     const B = { geral: [], publicos: [], anuncios: [], proximos: [] };
@@ -2275,7 +2359,7 @@ async function fillReportAnalysis(sec, cName, monthLabel) {
     if (geral) {
       geral.innerHTML = `<span class="rr-ph">⚠️ ${e.message} — <a href="#" class="rep-retry-an">tentar de novo</a></span>`;
       const a = geral.querySelector(".rep-retry-an");
-      if (a) a.addEventListener("click", (ev) => { ev.preventDefault(); geral.innerHTML = '<span class="rr-ph">⏳ gerando análise…</span>'; fillReportAnalysis(sec, cName, monthLabel); });
+      if (a) a.addEventListener("click", (ev) => { ev.preventDefault(); geral.innerHTML = '<span class="rr-ph">⏳ gerando análise…</span>'; fillReportAnalysis(sec, cName, monthLabel, opts); });
     }
     [publicos, anuncios].forEach((el) => el && el.remove());
     dropBox(proximos);
@@ -2307,15 +2391,11 @@ $("#saveHistRelBtn").addEventListener("click", async () => {
   const btn = $("#saveHistRelBtn"), old = btn.textContent;
   btn.textContent = "💾 salvando…"; btn.disabled = true;
   try {
-    // salva o HTML final (com análises e edições), mas SEM os controles de edição (ficariam inertes no histórico)
-    const clone = doc.cloneNode(true);
-    clone.querySelectorAll(".rr-kpi-x,.rr-addmetric-wrap,.rr-metricmenu,.rr-remove,.rr-clock").forEach((el) => el.remove());
-    clone.querySelectorAll("[contenteditable]").forEach((el) => el.removeAttribute("contenteditable"));
-    clone.querySelectorAll("[draggable]").forEach((el) => el.removeAttribute("draggable"));
+    // salva o HTML final; tira os botões de edição mas MANTÉM os textos editáveis (pra revisar no histórico)
     await window.api.historySave({
       projectId: d.projectId, clientName: d.cName, kind: "report",
       monthLabel: d.monthLabel, title: `Relatório ${d.monthLabel}`,
-      html: `<div class="rr-page">${clone.innerHTML}</div>`,
+      html: reportHtmlForSave(doc),
     });
     toast(`Relatório de ${d.monthLabel} salvo no histórico do cliente.`);
   } catch (e) { toast("Erro ao salvar: " + e.message, true); }
@@ -2667,14 +2747,28 @@ async function openHistory(id) {
   const det = $("#histDetail");
   if (h.kind === "report") {
     det.innerHTML = `<div class="section-title">${h.title || ("Relatório " + (h.monthLabel || ""))}</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px"><button class="chip-btn" id="histRepPdf">📄 Exportar PDF</button></div>
-      <div class="rr-doc" style="border:1px solid var(--line);border-radius:12px;overflow:hidden">${h.html || "<i>sem conteúdo</i>"}</div>`;
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+        <button class="chip-btn" id="histRepSave">💾 Salvar alterações</button>
+        <button class="chip-btn" id="histRepPdf">📄 Exportar PDF</button>
+        <span style="font-size:12px;color:var(--muted)">✏️ Clique nos textos da análise para editar antes de exportar.</span>
+      </div>
+      <div class="rr-doc" id="histRepDoc" style="border:1px solid var(--line);border-radius:12px;overflow:hidden">${h.html || "<i>sem conteúdo</i>"}</div>`;
+    const docEl = () => $("#histRepDoc .rr-page") || $("#histRepDoc");
     const pb = $("#histRepPdf");
     if (pb) pb.addEventListener("click", async () => {
       pb.disabled = true; const o = pb.textContent; pb.textContent = "⏳ gerando…";
-      try { const r = await window.api.reportExportPdf({ html: h.html, title: `${h.clientName || "relatorio"} - ${h.monthLabel || ""}` }); if (r && r.saved) toast("PDF salvo!"); }
+      try { const r = await window.api.reportExportPdf({ html: reportHtmlForSave(docEl()), title: `${h.clientName || "relatorio"} - ${h.monthLabel || ""}` }); if (r && r.saved) toast("PDF salvo!"); }
       catch (e) { toast("Erro no PDF: " + e.message, true); }
       finally { pb.disabled = false; pb.textContent = o; }
+    });
+    const sb = $("#histRepSave");
+    if (sb) sb.addEventListener("click", async () => {
+      sb.disabled = true; const o = sb.textContent; sb.textContent = "💾 salvando…";
+      try {
+        await window.api.historySave({ id: h.id, projectId: h.projectId, clientName: h.clientName, kind: "report", monthLabel: h.monthLabel, title: h.title, html: reportHtmlForSave(docEl()) });
+        toast("Alterações salvas no histórico.");
+      } catch (e) { toast("Erro ao salvar: " + e.message, true); }
+      finally { sb.disabled = false; sb.textContent = o; }
     });
     det.scrollIntoView({ behavior: "smooth" });
     return;
