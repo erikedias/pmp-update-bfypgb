@@ -229,6 +229,20 @@ function fillConfig() {
   if ($("#cfgAiEngine")) $("#cfgAiEngine").value = s.aiEngine || "gemini";
   renderMyClients();
 }
+const liConnectBtn = document.getElementById("liConnectBtn");
+if (liConnectBtn) liConnectBtn.addEventListener("click", async () => {
+  const m = $("#liTestMsg");
+  const clientId = $("#cfgLiCid").value.trim(), clientSecret = $("#cfgLiSec").value.trim();
+  if (!clientId || !clientSecret) { m.textContent = "Cole o Client ID e o Client Secret primeiro."; m.style.color = "#e0857a"; return; }
+  m.textContent = "abrindo o LinkedIn pra autorizar…"; m.style.color = "var(--muted)";
+  try {
+    const r = await window.api.linkedinConnect({ clientId, clientSecret });
+    state.settings = await window.api.getSettings();
+    $("#cfgLinkedinToken").value = state.settings.linkedinToken || "";
+    m.textContent = "✅ Conectado!" + (r.expiresInDays ? ` (token válido ~${r.expiresInDays} dias)` : "") + " — clique em testar conexão.";
+    m.style.color = "var(--accent)";
+  } catch (e) { m.textContent = "❌ " + e.message; m.style.color = "#e0857a"; }
+});
 const liTestBtn = document.getElementById("liTestBtn");
 if (liTestBtn) liTestBtn.addEventListener("click", async () => {
   const m = $("#liTestMsg"); m.textContent = "testando…";

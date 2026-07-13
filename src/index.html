@@ -447,8 +447,9 @@
           <div class="formrow" style="flex:1;min-width:200px"><label>Client ID (do app LinkedIn Developers)</label><input type="password" id="cfgLiCid" placeholder="86xxxxxx"></div>
           <div class="formrow" style="flex:1;min-width:160px"><label>Client Secret (a chave secret)</label><input type="password" id="cfgLiSec" placeholder="a chave secret"></div>
         </div>
-        <span class="help"><button class="chip-btn" id="liTestBtn">testar conexão</button> <span id="liTestMsg"></span></span>
-        <p class="sub" style="margin-top:8px">⚠️ Pra puxar dados e negativar demografia, seu app no LinkedIn precisa ter o produto <b>"Advertising API"</b> aprovado pela LinkedIn (scope <code>r_ads_reporting</code> pra ler, <code>rw_ads</code> pra negativar). A <b>chave secret sozinha não puxa dados</b> — ela serve pra gerar o Access Token via login. Cole o token acima (ou o Client ID + Secret) e clique em "testar conexão" pra ver o que sua conta libera.</p>
+        <span class="help"><button class="chip-btn" id="liConnectBtn">🔗 Conectar com LinkedIn</button> <button class="chip-btn" id="liTestBtn">testar conexão</button> <span id="liTestMsg"></span></span>
+        <p class="sub" style="margin-top:8px">Cola o <b>Client ID + Client Secret</b> e clica em <b>Conectar</b> — o navegador abre pra você autorizar e o app gera e guarda o Access Token sozinho.</p>
+        <p class="sub" style="margin-top:4px">⚠️ Antes de conectar: no seu app em <b>LinkedIn Developers → Auth</b>, adicione EXATAMENTE esta URL em "Authorized redirect URLs": <code>http://localhost:42815</code>. E o app precisa ter o produto <b>"Advertising API"</b> aprovado (scopes <code>r_ads</code>/<code>r_ads_reporting</code> pra ler demografia, <code>rw_ads</code> pra negativar) — sem isso o LinkedIn recusa.</p>
       </div>
 
       <div class="card">

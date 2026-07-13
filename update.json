@@ -1,6 +1,6 @@
 {
-  "version": "1.3.29",
-  "notes": "LinkedIn Ads: adicionada a opção nas Configurações pra colar o Access Token + Client ID/Secret, com botão 'testar conexão' que valida o token e mostra se sua conta tem acesso à API de Anúncios. (Primeiro passo pra puxar dados e negativar demografia — o resto depende do acesso liberado.)",
+  "version": "1.3.30",
+  "notes": "LinkedIn: agora dá pra conectar com Client ID + Client Secret (botão 'Conectar com LinkedIn') — o navegador abre, você autoriza e o app gera e guarda o Access Token sozinho (igual o Google Ads). Antes de conectar, cadastre a URL http://localhost:42815 no seu app do LinkedIn Developers e tenha o produto Advertising API liberado.",
   "files": [
     "src/app.js",
     "src/engine.js",

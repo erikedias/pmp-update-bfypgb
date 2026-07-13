@@ -2619,6 +2619,45 @@ ipcMain.handle("linkedin:test", async () => {
   } catch (e) { return { ok: false, msg: "Erro de rede: " + e.message }; }
 });
 
+// LinkedIn OAuth: abre o navegador pra autorizar e troca o code por um Access Token (guarda no app)
+ipcMain.handle("linkedin:connect", async (_e, { clientId, clientSecret }) => {
+  if (!clientId || !clientSecret) throw new Error("Cole o Client ID e o Client Secret primeiro.");
+  const http = require("http");
+  const PORT = 42815;
+  const redirectUri = `http://localhost:${PORT}`;
+  const stateStr = "pmp" + Date.now();
+  const authUrl = "https://www.linkedin.com/oauth/v2/authorization?" + new URLSearchParams({
+    response_type: "code", client_id: clientId, redirect_uri: redirectUri, state: stateStr,
+    scope: "r_ads r_ads_reporting rw_ads",
+  }).toString();
+  const code = await new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      const u = new URL(req.url, redirectUri);
+      const c = u.searchParams.get("code");
+      const err = u.searchParams.get("error_description") || u.searchParams.get("error");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<html><body style="font-family:sans-serif;background:#0b1018;color:#cdd6e3;text-align:center;padding-top:80px"><h2>${c ? "✅ Conectado!" : "❌ " + (err || "cancelado")}</h2><p>Pode fechar esta aba e voltar pro Painel.</p></body></html>`);
+      server.close();
+      if (c) resolve(c); else reject(new Error(err || "autorização cancelada"));
+    });
+    server.on("error", (e) => reject(new Error(e.code === "EADDRINUSE" ? "porta 42815 ocupada — feche outra conexão e tente de novo" : e.message)));
+    server.listen(PORT, () => shell.openExternal(authUrl));
+    setTimeout(() => { try { server.close(); } catch {} reject(new Error("tempo esgotado — tente de novo")); }, 180000);
+  });
+  const r = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "authorization_code", code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri }),
+  });
+  const tok = await r.json().catch(() => ({}));
+  if (!r.ok || !tok.access_token) throw new Error("O LinkedIn recusou o token" + (tok.error_description ? ": " + tok.error_description : ` (${r.status})`) + ". Verifique se o app tem o produto 'Advertising API' liberado e se a URL de redirecionamento http://localhost:42815 está cadastrada no app.");
+  const st = readStore();
+  st.settings.linkedinClientId = clientId;
+  st.settings.linkedinClientSecret = clientSecret;
+  st.settings.linkedinToken = tok.access_token;
+  writeStore(st);
+  return { ok: true, expiresInDays: tok.expires_in ? Math.round(tok.expires_in / 86400) : null };
+});
+
 // Exporta o HTML do relatório em PDF nítido (A4, texto vetorial) via printToPDF
 ipcMain.handle("report:exportPdf", async (_e, { html, title }) => {
   let css = "";
