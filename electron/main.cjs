@@ -2453,9 +2453,29 @@ function linkedinReportSection(li, prev, name) {
   return { platform: "linkedin", label: "LinkedIn Ads", subtitle: name || "", accent: "#0a66c2", topAccent: true, kpis, funnel, extraMetrics, blocks: [{ type: "analysis", id: "linkedin-geral" }, { type: "title", text: "Campanhas" }, tbl, { type: "proximos", id: "linkedin-proximos" }], raw: { totals: t, prev: p } };
 }
 
-// Seção Meta a partir do dado do Reportei (fallback quando não há conta Meta direta) — sem gráficos/thumbs
-function metaLeanFromReportei(li, prev, name) {
+// mapa nome-do-anúncio → miniatura do criativo (Meta), pra mostrar as imagens mesmo quando os
+// números vêm do Reportei. Casa pelo NOME do anúncio (o Reportei usa os mesmos nomes do Meta).
+const _thumbNorm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+async function metaAdThumbsByName(accountId, tok) {
+  const map = {};
+  if (!accountId || !tok) return map;
+  try {
+    let url = `${GRAPH}/${actId(accountId)}/ads?fields=name,creative{thumbnail_url,image_url}&limit=500&access_token=${encodeURIComponent(tok)}`;
+    let guard = 0;
+    while (url && guard++ < 6) {
+      const r = await httpJson(url);
+      (r.data || []).forEach((a) => { const c = a.creative || {}; const th = c.thumbnail_url || c.image_url || ""; const k = _thumbNorm(a.name); if (k && th && !map[k]) map[k] = th; });
+      url = r.paging && r.paging.next;
+    }
+  } catch {}
+  return map;
+}
+
+// Seção Meta a partir do dado do Reportei (fallback quando não há conta Meta direta).
+// Se a conta Meta estiver vinculada, puxa as MINIATURAS dos criativos e mostra na tabela de anúncios.
+async function metaLeanFromReportei(li, prev, name, metaAccountId) {
   const t = li.totals || {}, p = (prev && prev.totals) || {}, n = (v) => (v == null ? 0 : Number(v));
+  const adThumbs = await metaAdThumbsByName(metaAccountId, readStore().settings.metaToken);
   const impr = n(t.impressions), reach = n(t.reach), clk = n(t.clicks), leads = n(t.leads), spend = n(t.spend != null ? t.spend : t.cost);
   const P = { impr: n(p.impressions), reach: n(p.reach), clk: n(p.clicks), leads: n(p.leads), spend: n(p.spend != null ? p.spend : p.cost) };
   const cpm = (s, i) => i ? s / i * 1000 : null, cpc = (s, c) => c ? s / c : null, ctr = (c, i) => i ? c / i * 100 : null, cpl = (s, l) => l ? s / l : null;
@@ -2477,14 +2497,14 @@ function metaLeanFromReportei(li, prev, name) {
     { label: "Cliques", value: _en(clk), prev: _en(P.clk), dir: _dir(clk, P.clk) },
     { label: "Todos os cadastros (leads)", value: _en(leads), prev: _en(P.leads), dir: _dir(leads, P.leads) },
   ];
-  const mkTbl = (lvl, label) => { const rows = (li.rows || []).filter((r) => r.level === lvl); if (!rows.length) return null; return { type: "table", cols: [{ label, l: true }, { label: "Impressões" }, { label: "Alcance" }, { label: "CPM" }, { label: "CTR" }, { label: "Leads", sort: true }, { label: "CPL" }, { label: "Investido" }], rows: rows.map((r) => { const m = r.metrics || {}, sp = n(m.spend), i = n(m.impressions), ld = n(m.leads); return [{ v: r.name, l: true }, _en(i), _en(n(m.reach)), _brl(i ? sp / i * 1000 : null), _pct(m.ctr != null ? Number(m.ctr) : (i ? n(m.clicks) / i * 100 : null)), { v: String(ld) }, _brl(ld ? sp / ld : null), _brl(sp)]; }) }; };
+  const mkTbl = (lvl, label, withThumb) => { const rows = (li.rows || []).filter((r) => r.level === lvl); if (!rows.length) return null; return { type: "table", cols: [{ label, l: true }, { label: "Impressões" }, { label: "Alcance" }, { label: "CPM" }, { label: "CTR" }, { label: "Leads", sort: true }, { label: "CPL" }, { label: "Investido" }], rows: rows.map((r) => { const m = r.metrics || {}, sp = n(m.spend), i = n(m.impressions), ld = n(m.leads); const first = withThumb ? { thumb: adThumbs[_thumbNorm(r.name)] || "", name: r.name } : { v: r.name, l: true }; return [first, _en(i), _en(n(m.reach)), _brl(i ? sp / i * 1000 : null), _pct(m.ctr != null ? Number(m.ctr) : (i ? n(m.clicks) / i * 100 : null)), { v: String(ld) }, _brl(ld ? sp / ld : null), _brl(sp)]; }) }; };
   const rowsOf = (lvl) => (li.rows || []).filter((r) => r.level === lvl).map((r) => { const m = r.metrics || {}, i = n(m.impressions), c = n(m.clicks), ld = n(m.leads), sp = n(m.spend); return { name: r.name, ctr: m.ctr != null ? Number(m.ctr) : (i ? c / i * 100 : null), results: ld, cpr: ld ? sp / ld : null, spend: sp }; });
   const audRows = rowsOf("audience"), adRows2 = rowsOf("ad");
   const blocks = [{ type: "analysis", id: "meta-geral" }];
   const c = mkTbl("campaign", "Campanhas"); if (c) blocks.push({ type: "title", text: "Campanhas em destaque" }, c);
   const a = mkTbl("audience", "Conjunto de anúncio"); if (a) blocks.push({ type: "title", text: "Conjunto de anúncios em destaque" }, a);
   if (audRows.length) blocks.push({ type: "analysis", id: "meta-publicos" });
-  const d = mkTbl("ad", "Anúncio"); if (d) blocks.push({ type: "title", text: "Anúncios em Destaque" }, d);
+  const d = mkTbl("ad", "Anúncio", true); if (d) blocks.push({ type: "title", text: "Anúncios em Destaque" }, d);
   if (adRows2.length) blocks.push({ type: "analysis", id: "meta-anuncios" });
   blocks.push({ type: "proximos", id: "meta-proximos" });
   const extraMetrics = [];
@@ -2532,7 +2552,7 @@ ipcMain.handle("report:build", async (_e, { projectId, start, end, prevStart, pr
   // META — API direta (rica) se houver conta; senão Reportei (lean)
   let metaDone = false;
   if (acc.meta && st.settings.metaToken) { try { const s = await metaReportSection(acc.meta, start, end, prevStart, prevEnd, cname); if (s) { sections.push(s); metaDone = true; } } catch (e) { notes.push("Meta API: " + (e.message || e)); } }
-  if (!metaDone) { const li = rp(repCur, "meta"); if (li) { sections.push(metaLeanFromReportei(li, rp(repPrev, "meta"), cname)); if (acc.meta) notes.push("Meta: usei dados do Reportei (API direta sem retorno)."); } }
+  if (!metaDone) { const li = rp(repCur, "meta"); if (li) { sections.push(await metaLeanFromReportei(li, rp(repPrev, "meta"), cname, acc.meta)); if (acc.meta) notes.push("Meta: usei dados do Reportei (API direta sem retorno)."); } }
   // GOOGLE
   let gDone = false;
   if (acc.google && st.settings.googleAdsRefreshToken) { try { const s = await googleReportSection(acc.google, start, end, prevStart, prevEnd, cname); if (s) { sections.push(s); gDone = true; } } catch (e) { notes.push("Google API: " + (e.message || e)); } }

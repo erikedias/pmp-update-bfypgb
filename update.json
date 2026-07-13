@@ -1,6 +1,6 @@
 {
-  "version": "1.3.23",
-  "notes": "No Histórico, os relatórios agora são TOTALMENTE editáveis (igual ao gerar novo): além de editar os textos, dá pra remover métrica (✕), adicionar métrica (➕, incluindo personalizada) e arrastar pra reposicionar. Edita, salva as alterações e exporta o PDF — a última versão fica guardada.",
+  "version": "1.3.24",
+  "notes": "Agora as IMAGENS dos criativos aparecem na tabela de Anúncios também nas contas que puxam pelo Reportei (antes só as contas por API direta mostravam). O app busca as miniaturas na API do Meta e casa pelo nome do anúncio. Precisa da conta Meta vinculada ao cliente (⚙️ Configurações → contas).",
   "files": [
     "src/app.js",
     "src/engine.js",
