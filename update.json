@@ -1,6 +1,6 @@
 {
-  "version": "1.3.25",
-  "notes": "Logo do Google Ads corrigida no relatório para a versão oficial (barra amarela + barra azul longa formando o A + círculo verde na base), igual à marca. Antes a barra azul estava curta e fora de posição.",
+  "version": "1.3.26",
+  "notes": "Logo do Google Ads refeita fiel à marca oficial (barras amarela e azul grossas unidas no ápice formando o A, azul mais longa, círculo verde na base). Antes as barras estavam finas e separadas.",
   "files": [
     "src/app.js",
     "src/engine.js",
