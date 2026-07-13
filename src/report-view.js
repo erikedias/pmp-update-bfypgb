@@ -229,9 +229,25 @@
     return `<div class="rr-charts">${out.join("")}</div>`;
   }
 
+  /* ---------- seção de otimizações realizadas (review + lista por plataforma) ---------- */
+  function optimSection(d, opts) {
+    const accent = d.accent || "#16a34a";
+    let inner = `<div class="rr-head"><div class="rr-logo rr-optim-tool">🛠️</div>
+      <div class="rr-head-txt"><h2>${esc(d.label)}</h2>${d.subtitle ? `<div class="rr-sub">${esc(d.subtitle)}</div>` : ""}</div>
+      <button type="button" class="rr-remove" title="Remover esta seção do relatório">Remover ✕</button></div>`;
+    (d.blocks || []).forEach((b) => { if (b.type === "analysis" && b.id) inner += `<div class="rr-analysis" data-analysis="${esc(b.id)}"${opts.editable ? ' contenteditable="true"' : ""}><span class="rr-ph">⏳ montando o review das otimizações…</span></div>`; });
+    inner += `<div class="rr-optim">` + (d.otimGroups || []).map((g) => `
+      <div class="rr-optim-group">
+        <div class="rr-optim-head"><span class="rr-optim-logo">${LOGO[g.platform] || ""}</span> ${esc(g.label)}</div>
+        <ul class="rr-optim-list"${opts.editable ? ' contenteditable="true"' : ""}>${(g.items || []).map((it) => `<li><span class="rr-optim-ico">${esc(it.icon)}</span> <span class="rr-optim-txt">${esc(it.text)}</span>${it.detail ? ` <span class="rr-optim-det">— ${esc(it.detail)}</span>` : ""}<span class="rr-optim-date">${esc(it.date)}</span></li>`).join("")}</ul>
+      </div>`).join("") + `</div>`;
+    return `<section class="rr-section rr-top-accent" style="--rr-accent:${accent}">${inner}</section>`;
+  }
+
   /* ---------- seção de uma plataforma ---------- */
   function section(d, opts) {
     opts = opts || {};
+    if (d.platform === "otimizacoes") return optimSection(d, opts);
     const accent = d.accent || "#1877f2";
     let inner = `<div class="rr-head"><div class="rr-logo">${LOGO[d.platform] || ""}</div>
       <div class="rr-head-txt"><h2>${esc(d.label)}</h2>${d.subtitle ? `<div class="rr-sub">${esc(d.subtitle)}</div>` : ""}</div>

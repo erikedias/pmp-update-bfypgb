@@ -144,6 +144,22 @@ table.rr-tbl .r-sub { display: block; font-size: 11px; color: var(--rr-muted); f
 .rr-section:hover .rr-remove { opacity: 1; }
 .rr-remove:hover { color: var(--rr-down); background: var(--rr-down-bg); border-color: #f6cccc; }
 
+/* -------- otimizações realizadas (review pro cliente) -------- */
+.rr-logo.rr-optim-tool { font-size: 30px; }
+.rr-optim { margin: 8px 0 6px; display: grid; gap: 14px; }
+.rr-optim-group { border: 1px solid var(--rr-card-line); border-radius: 12px; overflow: hidden; }
+.rr-optim-head { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 800; color: var(--rr-ink); background: #f9fafb; padding: 11px 16px; border-bottom: 1px solid var(--rr-card-line); }
+.rr-optim-logo { width: 22px; height: 22px; display: inline-flex; }
+.rr-optim-logo svg { width: 22px; height: 22px; }
+.rr-optim-list { list-style: none; margin: 0; padding: 6px 16px 10px; }
+.rr-optim-list li { display: flex; align-items: baseline; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f1f3f6; font-size: 13.5px; color: var(--rr-ink-2); }
+.rr-optim-list li:last-child { border-bottom: 0; }
+.rr-optim-ico { flex: 0 0 auto; }
+.rr-optim-txt { flex: 1; }
+.rr-optim-det { color: var(--rr-muted); font-size: 12px; }
+.rr-optim-date { flex: 0 0 auto; color: var(--rr-muted); font-size: 11.5px; margin-left: auto; white-space: nowrap; }
+.rr-optim-list[contenteditable="true"]:focus { outline: none; background: #fbfcfe; box-shadow: 0 0 0 2px #e7eefd; border-radius: 8px; }
+
 /* -------- próximos passos (por plataforma, com base nos gargalos) -------- */
 .rr-nextsteps { margin: 22px 0 8px; padding: 16px 20px; border: 1px solid var(--rr-card-line); border-left: 4px solid var(--rr-accent, var(--rr-meta)); border-radius: 10px; background: #fbfcfe; }
 .rr-ns-title { font-size: 15px; font-weight: 800; color: var(--rr-ink); margin-bottom: 8px; }

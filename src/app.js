@@ -2227,8 +2227,8 @@ async function gerarRelatorio() {
     state.repDoc = { cName, monthLabel, projectId, benchmarks: repCli.benchmarks || {}, sections: resp.sections };
     $("#copyRelBtn").classList.remove("hidden"); $("#pdfRelBtn").classList.remove("hidden"); $("#saveHistRelBtn").classList.remove("hidden");
     if ((resp.notes || []).length) console.warn("[relatório]", resp.notes.join(" | "));
-    // preenche a análise de cada seção (Gemini/Claude) — em paralelo
-    resp.sections.forEach((sec) => fillReportAnalysis(sec, cName, monthLabel));
+    // preenche a análise de cada seção (Gemini/Claude) — em paralelo; otimizações têm review próprio
+    resp.sections.forEach((sec) => sec.platform === "otimizacoes" ? fillOptimReview(sec, cName, monthLabel) : fillReportAnalysis(sec, cName, monthLabel));
     return;
   } catch (e) {
     body.innerHTML = `<div class="state error"><div class="big">⚠️</div>${e.message}</div>`;
@@ -2275,7 +2275,7 @@ async function bulkGenerateReports(ids) {
       stage.innerHTML = "";
       ReportView.renderInto(stage, resp.sections, { editable: true });
       const cli = state.clients.find((c) => c.projectId === s.pid) || {};
-      await Promise.all(resp.sections.map((sec) => fillReportAnalysis(sec, s.name, per.monthLabel, { root: stage, benchmarks: cli.benchmarks || {} })));
+      await Promise.all(resp.sections.map((sec) => sec.platform === "otimizacoes" ? fillOptimReview(sec, s.name, per.monthLabel, { root: stage }) : fillReportAnalysis(sec, s.name, per.monthLabel, { root: stage, benchmarks: cli.benchmarks || {} })));
       const pageEl = stage.querySelector(".rr-page");
       await window.api.historySave({ projectId: s.pid, clientName: s.name, kind: "report", monthLabel: per.monthLabel, title: `Relatório ${per.monthLabel}`, html: reportHtmlForSave(pageEl) });
       s.st = "ok"; render();
@@ -2364,6 +2364,22 @@ async function fillReportAnalysis(sec, cName, monthLabel, opts) {
     [publicos, anuncios].forEach((el) => el && el.remove());
     dropBox(proximos);
   }
+}
+
+// preenche o REVIEW da seção de otimizações (texto da IA sobre o que foi feito)
+async function fillOptimReview(sec, cName, monthLabel, opts) {
+  opts = opts || {};
+  const root = opts.root || document.getElementById("repBody");
+  if (!root) return;
+  const el = root.querySelector('[data-analysis="otim-review"]');
+  if (!el) return;
+  try {
+    const txt = await window.api.reportReviewOptim({ clientName: cName, monthLabel, groups: (sec.otimGroups || []).map((g) => ({ label: g.label, items: (g.items || []).map((it) => ({ text: it.text, detail: it.detail })) })) });
+    const pts = parseAnalysisPoints(txt);
+    if (pts.length) el.innerHTML = pointsToHtml(pts);
+    else { const p = document.createElement("p"); p.textContent = String(txt || "").replace(/^\s*##\s*.*\n?/gm, "").trim(); el.innerHTML = ""; el.appendChild(p); }
+    el.contentEditable = "true";
+  } catch (e) { el.innerHTML = `<span class="rr-ph">⚠️ ${e.message}</span>`; }
 }
 
 // texto "## Título\nparágrafo" → lista de pontos {title, body}

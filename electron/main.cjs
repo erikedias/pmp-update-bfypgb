@@ -2575,7 +2575,30 @@ ipcMain.handle("report:build", async (_e, { projectId, start, end, prevStart, pr
     if (lp && lp.total > 0) { q.mqls = lp.mqls; q.mqlRate = lp.mqlRate; q.leadsTotal = lp.total; if (leadsQ.hasSql) { q.sqls = lp.sqls; q.sqlRate = lp.sqlRate; } }
     if (Object.keys(q).length) sec.quali = q;
   });
+  // OTIMIZAÇÕES realizadas na conta no período (log de ações do app) — review pra mostrar ao cliente
+  const acts = (st.actions || []).filter((a) => a.projectId === projectId && a.at && a.at.slice(0, 10) >= start && a.at.slice(0, 10) <= end);
+  if (acts.length) {
+    const platOf = (s) => { const t = String(s || "").toLowerCase(); return /google/.test(t) ? "google" : /linkedin/.test(t) ? "linkedin" : /(meta|facebook|instagram)/.test(t) ? "meta" : "geral"; };
+    const icoOf = (type) => ({ negativacao: "🚫", keyword: "➕", toggle: "⚙️", creative: "🎨", ekyte: "📋" }[type] || "•");
+    const labelOf = { meta: "Meta Ads", google: "Google Ads", linkedin: "LinkedIn Ads", geral: "Geral" };
+    const byPlat = {};
+    acts.forEach((a) => { const p = platOf(a.summary + " " + (a.detail || "")); (byPlat[p] = byPlat[p] || []).push({ icon: icoOf(a.type), text: a.summary, detail: a.detail || "", date: a.at.slice(0, 10).split("-").reverse().join("/") }); });
+    const groups = ["meta", "google", "linkedin", "geral"].filter((p) => byPlat[p]).map((p) => ({ platform: p, label: labelOf[p], items: byPlat[p] }));
+    withData.push({ platform: "otimizacoes", label: "Otimizações realizadas", subtitle: cname || "", accent: "#16a34a", otimGroups: groups, blocks: [{ type: "analysis", id: "otim-review" }] });
+  }
   return { sections: withData, notes };
+});
+
+// review das otimizações realizadas (pra apresentar ao cliente)
+ipcMain.handle("report:reviewOptimizations", async (_e, d) => {
+  const lines = (d.groups || []).map((g) => `${g.label}:\n` + (g.items || []).map((it) => `- ${it.text}${it.detail ? ` (${it.detail})` : ""}`).join("\n")).join("\n\n");
+  const prompt = [
+    `Você é analista de mídia paga. Escreva um REVIEW das otimizações que foram realizadas na conta do cliente "${d.clientName || ""}" em ${d.monthLabel || "no período"}, para apresentar AO CLIENTE — tom profissional, mostrando o valor do trabalho feito.`,
+    `FORMATO: para CADA plataforma com otimizações, comece com "## " seguido do nome da plataforma e, na linha seguinte, UM parágrafo explicando o que foi feito e o porquê (o benefício pra performance da conta). Deixe uma linha em branco entre os pontos.`,
+    `REGRAS: use SOMENTE as otimizações listadas abaixo, não invente nenhuma. Já é o texto final — sem "vou analisar", sem traços/asteriscos/markdown além do "## ". Português, claro e objetivo.`,
+    `\nOTIMIZAÇÕES REALIZADAS:\n${lines}`,
+  ].join("\n");
+  return aiReport(readStore().settings, prompt);
 });
 
 // Exporta o HTML do relatório em PDF nítido (A4, texto vetorial) via printToPDF
