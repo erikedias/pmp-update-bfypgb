@@ -439,7 +439,16 @@
         </span>
         <p class="sub" style="margin-top:6px">Cola o Client ID + Secret e clica em Conectar — o navegador abre pra você autorizar e o app guarda o acesso sozinho. <input type="hidden" id="cfgGadsRef"></p>
         <span class="help"><button class="chip-btn" id="gadsTestBtn">testar conexão</button> <span id="gadsTestMsg"></span></span>
-        <p class="sub" style="margin-top:10px">LinkedIn: a API de criação exige aprovação no programa de parceiros — fica pra próxima fase.</p>
+        <div class="formrow" style="border-top:1px solid var(--line);padding-top:14px">
+          <label>LinkedIn Ads — Access Token (pra puxar dados e negativar demografia) <a class="ext" href="https://www.linkedin.com/developers/apps" style="font-size:11px;color:var(--accent);margin-left:6px;text-decoration:none">onde pegar ↗</a></label>
+          <input type="password" id="cfgLinkedinToken" placeholder="token de acesso (scopes r_ads, r_ads_reporting, rw_ads)">
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div class="formrow" style="flex:1;min-width:200px"><label>Client ID (do app LinkedIn Developers)</label><input type="password" id="cfgLiCid" placeholder="86xxxxxx"></div>
+          <div class="formrow" style="flex:1;min-width:160px"><label>Client Secret (a chave secret)</label><input type="password" id="cfgLiSec" placeholder="a chave secret"></div>
+        </div>
+        <span class="help"><button class="chip-btn" id="liTestBtn">testar conexão</button> <span id="liTestMsg"></span></span>
+        <p class="sub" style="margin-top:8px">⚠️ Pra puxar dados e negativar demografia, seu app no LinkedIn precisa ter o produto <b>"Advertising API"</b> aprovado pela LinkedIn (scope <code>r_ads_reporting</code> pra ler, <code>rw_ads</code> pra negativar). A <b>chave secret sozinha não puxa dados</b> — ela serve pra gerar o Access Token via login. Cole o token acima (ou o Client ID + Secret) e clique em "testar conexão" pra ver o que sua conta libera.</p>
       </div>
 
       <div class="card">

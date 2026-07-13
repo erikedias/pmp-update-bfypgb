@@ -1,6 +1,6 @@
 {
-  "version": "1.3.28",
-  "notes": "Nova seção 'Otimizações realizadas' no relatório: mostra o que foi feito na conta do cliente no mês (negativações, palavras-chave, pausar/ativar, criativos, tarefas), agrupado por plataforma, com um review da IA explicando o valor de cada ação — pronto pra mostrar ao cliente. A lista e o review são editáveis (dá pra complementar o que foi feito fora do app). Puxa do histórico de ações registradas no app.",
+  "version": "1.3.29",
+  "notes": "LinkedIn Ads: adicionada a opção nas Configurações pra colar o Access Token + Client ID/Secret, com botão 'testar conexão' que valida o token e mostra se sua conta tem acesso à API de Anúncios. (Primeiro passo pra puxar dados e negativar demografia — o resto depende do acesso liberado.)",
   "files": [
     "src/app.js",
     "src/engine.js",

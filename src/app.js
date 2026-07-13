@@ -224,10 +224,22 @@ function fillConfig() {
   $("#cfgGadsSec").value = s.googleAdsClientSecret || "";
   $("#cfgGadsRef").value = s.googleAdsRefreshToken || "";
   $("#cfgGadsMcc").value = s.googleAdsLoginCustomerId || "";
+  if ($("#cfgLinkedinToken")) { $("#cfgLinkedinToken").value = s.linkedinToken || ""; $("#cfgLiCid").value = s.linkedinClientId || ""; $("#cfgLiSec").value = s.linkedinClientSecret || ""; }
   $("#cfgReportTemplate").value = s.reportTemplate || "";
   if ($("#cfgAiEngine")) $("#cfgAiEngine").value = s.aiEngine || "gemini";
   renderMyClients();
 }
+const liTestBtn = document.getElementById("liTestBtn");
+if (liTestBtn) liTestBtn.addEventListener("click", async () => {
+  const m = $("#liTestMsg"); m.textContent = "testando…";
+  // salva o token antes de testar
+  try { state.settings = await window.api.setSettings({ linkedinToken: $("#cfgLinkedinToken").value.trim(), linkedinClientId: $("#cfgLiCid").value.trim(), linkedinClientSecret: $("#cfgLiSec").value.trim() }); } catch {}
+  try {
+    const r = await window.api.linkedinTest();
+    m.textContent = r.msg || (r.ok ? "ok" : "falhou");
+    m.style.color = r.ok ? "var(--accent)" : "#e0857a";
+  } catch (e) { m.textContent = "❌ " + e.message; m.style.color = "#e0857a"; }
+});
 $("#saveTemplateBtn").addEventListener("click", async () => {
   state.settings = await window.api.setSettings({ reportTemplate: $("#cfgReportTemplate").value });
   toast("Modelo de relatório salvo.");
@@ -249,6 +261,9 @@ $("#saveCfgBtn").addEventListener("click", async () => {
     googleAdsClientSecret: $("#cfgGadsSec").value.trim(),
     googleAdsRefreshToken: $("#cfgGadsRef").value.trim(),
     googleAdsLoginCustomerId: $("#cfgGadsMcc").value.trim().replace(/-/g, ""),
+    linkedinToken: ($("#cfgLinkedinToken") ? $("#cfgLinkedinToken").value.trim() : ""),
+    linkedinClientId: ($("#cfgLiCid") ? $("#cfgLiCid").value.trim() : ""),
+    linkedinClientSecret: ($("#cfgLiSec") ? $("#cfgLiSec").value.trim() : ""),
   });
   updateNavHint();
   toast("Chaves salvas com segurança no seu PC.");

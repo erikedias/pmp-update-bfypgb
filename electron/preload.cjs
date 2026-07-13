@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("api", {
   reportAnalyze: (args) => ipcRenderer.invoke("report:analyzeSection", args),
   reportAnalyzeMetric: (args) => ipcRenderer.invoke("report:analyzeMetric", args),
   reportReviewOptim: (args) => ipcRenderer.invoke("report:reviewOptimizations", args),
+  linkedinTest: () => ipcRenderer.invoke("linkedin:test"),
   reportExportPdf: (args) => ipcRenderer.invoke("report:exportPdf", args),
 
   // Trello

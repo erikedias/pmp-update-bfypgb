@@ -15,7 +15,7 @@ const os = require("os");
 /* ---------------------------------------------------------- */
 const STORE_PATH = () => path.join(app.getPath("userData"), "store.json");
 const DEFAULT_STORE = {
-  settings: { reporteiToken: "", trelloKey: "", trelloToken: "", geminiKey: "", geminiModel: "gemini-2.5-flash", aiEngine: "gemini", reportTemplate: "", googleSheetsKey: "", metaToken: "", googleAdsDevToken: "", googleAdsClientId: "", googleAdsClientSecret: "", googleAdsRefreshToken: "", googleAdsLoginCustomerId: "", googleAdsApiVersion: "", pageSpeedKey: "", updateBaseUrl: "https://raw.githubusercontent.com/erikedias/pmp-update-bfypgb/main", ekyteKey: "", ekyteAnalystEmail: "", ekytePoEmail: "", ekyteTaskTypeId: "", ekyteWorkspaceId: "", ekyteCompanyId: "", ekyteWebhookUrl: "", ekyteMcpUrl: "", ekyteMcpToken: "", ekyteMcpTool: "" },
+  settings: { reporteiToken: "", trelloKey: "", trelloToken: "", geminiKey: "", geminiModel: "gemini-2.5-flash", aiEngine: "gemini", reportTemplate: "", googleSheetsKey: "", metaToken: "", googleAdsDevToken: "", googleAdsClientId: "", googleAdsClientSecret: "", googleAdsRefreshToken: "", googleAdsLoginCustomerId: "", googleAdsApiVersion: "", linkedinToken: "", linkedinClientId: "", linkedinClientSecret: "", pageSpeedKey: "", updateBaseUrl: "https://raw.githubusercontent.com/erikedias/pmp-update-bfypgb/main", ekyteKey: "", ekyteAnalystEmail: "", ekytePoEmail: "", ekyteTaskTypeId: "", ekyteWorkspaceId: "", ekyteCompanyId: "", ekyteWebhookUrl: "", ekyteMcpUrl: "", ekyteMcpToken: "", ekyteMcpTool: "" },
   clients: [], // [{projectId, name, trelloBoardId, trelloBoardName}]
   history: [], // [{id, projectId, clientName, weekLabel, start, end, savedAt, platformResults, items, analysisText, trello}]
   actions: [], // [{id, at, projectId, clientName, type, summary, detail}]
@@ -2599,6 +2599,24 @@ ipcMain.handle("report:reviewOptimizations", async (_e, d) => {
     `\nOTIMIZAÇÕES REALIZADAS:\n${lines}`,
   ].join("\n");
   return aiReport(readStore().settings, prompt);
+});
+
+// testa a conexão do LinkedIn Ads: valida o token e mostra se a conta libera a API de Anúncios
+ipcMain.handle("linkedin:test", async () => {
+  const s = readStore().settings;
+  const tok = (s.linkedinToken || "").trim();
+  if (!tok) return { ok: false, msg: "Cole o Access Token do LinkedIn primeiro. A chave secret (Client Secret) sozinha não puxa dados — ela serve pra gerar o token via login." };
+  const headers = { Authorization: `Bearer ${tok}`, "X-Restli-Protocol-Version": "2.0.0" };
+  try {
+    const r = await fetch("https://api.linkedin.com/v2/adAccountsV2?q=search&start=0&count=10", { headers });
+    const txt = await r.text();
+    if (r.status === 401) return { ok: false, msg: "Token inválido ou expirado (401). Gere um Access Token novo (o do LinkedIn dura ~60 dias)." };
+    if (r.status === 403) return { ok: false, msg: "Token válido, mas SEM permissão de Anúncios (403). Seu app no LinkedIn precisa do produto 'Advertising API' aprovado + os scopes r_ads/r_ads_reporting." };
+    if (!r.ok) return { ok: false, msg: `LinkedIn respondeu ${r.status}: ${txt.slice(0, 240)}` };
+    let data = {}; try { data = JSON.parse(txt); } catch {}
+    const accts = (data.elements || []).map((a) => ({ id: a.id, name: a.name || a.reference || String(a.id) }));
+    return { ok: true, msg: `✅ Conectado! ${accts.length} conta(s) de anúncio acessível(is).`, accounts: accts };
+  } catch (e) { return { ok: false, msg: "Erro de rede: " + e.message }; }
 });
 
 // Exporta o HTML do relatório em PDF nítido (A4, texto vetorial) via printToPDF
