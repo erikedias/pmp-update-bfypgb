@@ -20,14 +20,29 @@
 
   const fmtBy = { int: fmtInt, brl: fmtBRL, pct: trimPct, num2: fmtNum2, raw: (v) => esc(v) };
 
-  // delta % vs período anterior — cor SÓ pelo sinal (igual ao Reportei: sobe=verde, cai=vermelho)
-  function deltaHTML(cur, prev) {
+  // métricas em que SUBIR é ruim (custo por resultado). Verba total é investimento → não inverte.
+  function lowerIsBetter(label) {
+    const L = String(label || "").toLowerCase().trim();
+    if (/^custo$|^custo total$|valor investido|^investido|^investimento/.test(L)) return false;
+    return /custo por|cost per|\bcpc\b|\bcpm\b|\bcpl\b|\bcpa\b/.test(L);
+  }
+  // delta % vs período anterior. A SETA mostra a direção real (subiu/caiu); a COR mostra se isso é
+  // BOM (verde) ou RUIM (vermelho) — ex.: custo por conversão subindo = seta ▲ vermelha.
+  // opts.invert = true → subir é ruim. opts.editable → dá pra clicar e inverter no relatório.
+  function deltaHTML(cur, prev, opts) {
     if (prev == null || prev === 0 || cur == null) return "";
+    opts = opts || {};
     const d = (cur - prev) / prev * 100;
     const v = parseFloat(d.toFixed(2));
-    const cls = Math.abs(v) < 0.005 ? "flat" : v > 0 ? "up" : "down";
-    const arrow = cls === "up" ? "▲" : cls === "down" ? "▼" : "";
-    return `<span class="rr-delta ${cls}">${arrow ? arrow + " " : ""}${v > 0 ? "+" : ""}${v}%</span>`;
+    const flat = Math.abs(v) < 0.005;
+    const dir = flat ? "flat" : v > 0 ? "up" : "down";
+    const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "";
+    const inv = !!opts.invert;
+    const good = inv ? v < 0 : v > 0;          // é uma melhora?
+    const cls = flat ? "flat" : good ? "up" : "down"; // up = verde, down = vermelho (cor = bom/ruim)
+    const ed = opts.editable && !flat;
+    const tip = inv ? "Hoje: SUBIR é ruim. Clique pra inverter." : "Hoje: SUBIR é bom. Clique pra inverter.";
+    return `<span class="rr-delta ${cls}${ed ? " rr-delta-edit" : ""}" data-dir="${dir}" data-invert="${inv ? 1 : 0}"${ed ? ` role="button" tabindex="0" title="${tip}"` : ""}>${arrow ? arrow + " " : ""}${v > 0 ? "+" : ""}${v}%</span>`;
   }
   const q = () => `<span class="k-q">?</span>`;
 
@@ -106,7 +121,7 @@
       let ratio = showRatio ? parseFloat((nums[i] / nums[i - 1] * 100).toFixed(2)) : null;
       // taxa > 100% = a etapa cresceu em vez de afunilar (caminhos paralelos, ex.: mensagem vs lead) → não é etapa real do funil
       if (ratio != null && ratio > 100) ratio = null;
-      const delta = (s.prev != null && s.prev !== "") ? deltaHTML(nums[i], parseNum(s.prev)) : (s.dir ? `<span class="rr-delta ${s.dir === "up" ? "up" : s.dir === "down" ? "down" : "flat"}">${s.dir === "up" ? "▲" : s.dir === "down" ? "▼" : ""}</span>` : "");
+      const delta = (s.prev != null && s.prev !== "") ? deltaHTML(nums[i], parseNum(s.prev), { invert: s.invert != null ? s.invert : lowerIsBetter(s.label) }) : (s.dir ? `<span class="rr-delta ${s.dir === "up" ? "up" : s.dir === "down" ? "down" : "flat"}">${s.dir === "up" ? "▲" : s.dir === "down" ? "▼" : ""}</span>` : "");
       return `<div class="rr-fcard">
         <div class="rr-fc-top">
           <div class="rr-fc-lbl">${esc(s.label)}</div>
@@ -188,7 +203,7 @@
     const drag = editable ? ` draggable="true" title="Arraste para mudar a posição"` : "";
     return `<div class="rr-kpi${k.big ? " big" : ""}" data-metric="${esc(k.label)}"${drag}>${x}
       <div class="k-lbl">${esc(k.label)} ${q()}</div>
-      <div class="k-row"><span class="k-val">${fmt(k.value)}</span>${deltaHTML(k.value, k.prev)}</div>
+      <div class="k-row"><span class="k-val">${fmt(k.value)}</span>${deltaHTML(k.value, k.prev, { invert: k.invert != null ? k.invert : lowerIsBetter(k.label), editable })}</div>
       ${k.prev != null ? `<div class="k-prev"><b>${fmt(k.prev)}</b> no período anterior</div>` : ""}
     </div>`;
   }
@@ -223,9 +238,14 @@
     const cell = (title, leg, svg) => `<div class="rr-chart"><div class="rr-ctitle">${esc(title)} ${q()}</div>${leg}${svg}</div>`;
     const out = [];
     if (ch.timeseries) out.push(cell("Cliques e CTR durante o tempo", legend([{ c: "#22c55e", t: "CTR (Todos)" }, { c: "#2563eb", t: "Cliques" }]), lineSVG(ch.timeseries.labels, ch.timeseries.ctr, ch.timeseries.clicks)));
+    // Google: pizzas de dispositivo (cliques / conversões / custo) — dado real da conta
+    (ch.devicePies || []).forEach((p) => out.push(cell(p.title, legend((p.slices || []).map((s) => ({ c: s.color, t: s.label }))), pieSVG(p.slices || []))));
     if (ch.age) out.push(cell("Impressões e alcance por idade", legend([{ c: "#22c55e", t: "Impressões" }, { c: "#2563eb", t: "Alcance" }]), barsSVG(ch.age.labels, ch.age.impressions, ch.age.reach)));
+    // Google: idade/gênero só com impressões (barra única)
+    if (ch.ageImpr) out.push(cell("Impressões por Idade", legend([{ c: "#22c55e", t: "Impressões" }]), barsSVG(ch.ageImpr.labels, ch.ageImpr.impressions, ch.ageImpr.impressions.map(() => 0))));
     if (ch.device) out.push(cell("Alcance por plataforma de dispositivo", legend(ch.device.map((s) => ({ c: s.color, t: s.label }))), pieSVG(ch.device)));
     if (ch.gender) out.push(cell("Impressões e alcance por gênero", legend([{ c: "#22c55e", t: "Impressões" }, { c: "#2563eb", t: "Alcance" }]), barsSVG(ch.gender.labels, ch.gender.impressions, ch.gender.reach)));
+    if (ch.genderImpr) out.push(cell("Impressões por Gênero", legend([{ c: "#22c55e", t: "Impressões" }]), barsSVG(ch.genderImpr.labels, ch.genderImpr.impressions, ch.genderImpr.impressions.map(() => 0))));
     return `<div class="rr-charts">${out.join("")}</div>`;
   }
 
@@ -236,12 +256,34 @@
       <div class="rr-head-txt"><h2>${esc(d.label)}</h2>${d.subtitle ? `<div class="rr-sub">${esc(d.subtitle)}</div>` : ""}</div>
       <button type="button" class="rr-remove" title="Remover esta seção do relatório">Remover ✕</button></div>`;
     (d.blocks || []).forEach((b) => { if (b.type === "analysis" && b.id) inner += `<div class="rr-analysis" data-analysis="${esc(b.id)}"${opts.editable ? ' contenteditable="true"' : ""}><span class="rr-ph">⏳ montando o review das otimizações…</span></div>`; });
-    inner += `<div class="rr-optim">` + (d.otimGroups || []).map((g) => `
-      <div class="rr-optim-group">
-        <div class="rr-optim-head"><span class="rr-optim-logo">${LOGO[g.platform] || ""}</span> ${esc(g.label)}</div>
-        <ul class="rr-optim-list"${opts.editable ? ' contenteditable="true"' : ""}>${(g.items || []).map((it) => `<li><span class="rr-optim-ico">${esc(it.icon)}</span> <span class="rr-optim-txt">${esc(it.text)}</span>${it.detail ? ` <span class="rr-optim-det">— ${esc(it.detail)}</span>` : ""}<span class="rr-optim-date">${esc(it.date)}</span></li>`).join("")}</ul>
-      </div>`).join("") + `</div>`;
+    // cards concluídos no Trello no mês → lista de links (com data), editável (remover/ajustar)
+    if ((d.trelloCards || []).length) {
+      const li = (c) => opts.editable
+        ? `<li>${c.url ? `<a class="rr-trello-link" href="${esc(c.url)}" title="Abrir card no Trello">🔗</a>` : "<span class='rr-trello-ico'>🔗</span>"}<span class="rr-trello-name" contenteditable="true">${esc(c.name)}</span>${c.date ? `<span class="rr-optim-date">${esc(c.date)}</span>` : ""}<button type="button" class="rr-trello-x" title="Remover do relatório">✕</button></li>`
+        : `<li><a class="rr-trello-link"${c.url ? ` href="${esc(c.url)}"` : ""} target="_blank" rel="noopener">🔗 ${esc(c.name)}</a>${c.date ? `<span class="rr-optim-date">${esc(c.date)}</span>` : ""}</li>`;
+      inner += `<div class="rr-title">Concluído no Trello${d.trelloListName ? ` — ${esc(d.trelloListName)}` : ""}</div>
+        <ul class="rr-trello-list">${d.trelloCards.map(li).join("")}</ul>`;
+    }
+    // fallback: agrupamento por plataforma vindo do log de ações do app
+    if ((d.otimGroups || []).length) {
+      inner += `<div class="rr-optim">` + d.otimGroups.map((g) => `
+        <div class="rr-optim-group">
+          <div class="rr-optim-head"><span class="rr-optim-logo">${LOGO[g.platform] || ""}</span> ${esc(g.label)}</div>
+          <ul class="rr-optim-list"${opts.editable ? ' contenteditable="true"' : ""}>${(g.items || []).map((it) => `<li><span class="rr-optim-ico">${esc(it.icon)}</span> <span class="rr-optim-txt">${esc(it.text)}</span>${it.detail ? ` <span class="rr-optim-det">— ${esc(it.detail)}</span>` : ""}<span class="rr-optim-date">${esc(it.date)}</span></li>`).join("")}</ul>
+        </div>`).join("") + `</div>`;
+    }
     return `<section class="rr-section rr-top-accent" style="--rr-accent:${accent}">${inner}</section>`;
+  }
+
+  /* ---------- bloco de observações (só na edição; nunca vai pro PDF/cliente) ----------
+     A analista escreve fatos pontuais que a IA não tem como saber (ex.: "trocamos a
+     correspondência da palavra-chave") e a IA incorpora isso no texto da métrica. */
+  function obsBlock(platform) {
+    return `<div class="rr-obs" data-obs="${esc(platform)}">
+      <div class="rr-obs-title">📝 Observações — só pra você (não sai no PDF)</div>
+      <textarea class="rr-obs-txt" rows="2" placeholder="Ex.: as impressões caíram porque mudamos a correspondência das palavras-chave para frase."></textarea>
+      <div class="rr-obs-row"><button type="button" class="rr-obs-apply">✨ Aplicar no texto</button><span class="rr-obs-msg"></span></div>
+    </div>`;
   }
 
   /* ---------- seção de uma plataforma ---------- */
@@ -256,6 +298,7 @@
     inner += kpiGrid(d.kpis || [], opts, d);
     if (d.funnel) inner += `<div class="rr-title">Funil ${q()}</div>${funnelHorizontal(d.funnel)}`;
     inner += chartsGrid(d.charts);
+    if (opts.editable) inner += obsBlock(d.platform);
     (d.blocks || []).forEach((b) => {
       if (b.type === "title") inner += `<div class="rr-title">${esc(b.text)} ${q()}</div>`;
       else if (b.type === "table") inner += table(b);

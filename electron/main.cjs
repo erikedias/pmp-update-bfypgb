@@ -377,6 +377,49 @@ function findList(lists, ...needles) {
   }
   return null;
 }
+// Cards da coluna de concluído que pertencem ao mês do relatório [start,end] (YYYY-MM-DD, com ano).
+// Regra da data: se o card TEM data marcada (due), ela manda — assim tarefa de outro mês/ano
+// (ex.: "Relatório de Agosto de 2025") não entra mesmo se foi movida agora. Se o card NÃO tem data
+// marcada, vale a data em que ele ENTROU na coluna de concluído (ações do board) — assim os cards
+// sem data não somem do relatório. Retorna { listName, cards:[{name,url,date,labels}] }.
+async function trelloDoneCardsInMonth(s, boardId, start, end) {
+  if (!boardId) return { listName: null, cards: [] };
+  let lists = [];
+  try { lists = await trelloLists(s, boardId); } catch { return { listName: null, cards: [] }; }
+  const doneId = findList(lists, "concluíd", "concluido", "done", "o que foi feito", "feito na semana", "feitos", "feito");
+  if (!doneId) return { listName: null, cards: [] };
+  const listName = (lists.find((l) => l.id === doneId) || {}).name || "Concluído";
+  const inMonth = (d) => !!d && d >= start && d <= end;
+  // cards que estão hoje na coluna de concluído (nome, link e data marcada)
+  let listCards = [];
+  try { listCards = await httpJson(`${TRELLO}/lists/${doneId}/cards?fields=name,shortUrl,due,labels&${trelloAuth(s)}`); } catch {}
+  listCards = Array.isArray(listCards) ? listCards : [];
+  // data em que cada card entrou na coluna de concluído DENTRO do mês (só pros cards sem data marcada)
+  const movedAt = {};
+  try {
+    let before = end + "T23:59:59.999Z", guard = 0;
+    while (guard++ < 12) {
+      const acts = await httpJson(`${TRELLO}/boards/${boardId}/actions?filter=updateCard,createCard&since=${start}T00:00:00.000Z&before=${encodeURIComponent(before)}&limit=1000&${trelloAuth(s)}`);
+      const arr = Array.isArray(acts) ? acts : [];
+      arr.forEach((a) => {
+        const d = a.data || {};
+        const entered = (d.listAfter && d.listAfter.id === doneId) || (a.type === "createCard" && d.list && d.list.id === doneId);
+        if (entered && d.card && !movedAt[d.card.id]) movedAt[d.card.id] = String(a.date || "").slice(0, 10);
+      });
+      if (arr.length < 1000) break;
+      before = arr[arr.length - 1].date;
+    }
+  } catch {}
+  const cards = [];
+  listCards.forEach((c) => {
+    const due = String(c.due || "").slice(0, 10);
+    const date = due || movedAt[c.id] || ""; // data do card manda; sem ela, a data de conclusão
+    if (!inMonth(date)) return;
+    cards.push({ name: c.name || "(card)", url: c.shortUrl || "", date, labels: (c.labels || []).map((l) => l.name).filter(Boolean) });
+  });
+  cards.sort((a, b) => a.date.localeCompare(b.date));
+  return { listName, cards };
+}
 async function trelloCreateCard(s, listId, name, desc) {
   const params = new URLSearchParams({ idList: listId, name, desc: desc || "", key: s.trelloKey, token: s.trelloToken });
   return await httpJson(`${TRELLO}/cards`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params.toString() });
@@ -754,6 +797,7 @@ function buildReportAnalysisPrompt(d) {
   const q = d.quali || {};
   const qualiLines = (() => {
     const L = [];
+    if (q.connectRate != null) L.push(`Taxa de Conexão (sessões que vieram do anúncio ÷ cliques, medida no GA4): ${parseFloat(Number(q.connectRate).toFixed(1))}% (${q.connectSessions} sessões de ${q.connectClicks} cliques) — ideal ≥ ${q.connectBench || 80}%; abaixo indica perda entre o clique e a chegada no site (página lenta, erro de redirecionamento ou cliques acidentais)`);
     if (q.fillRate != null) L.push(`Taxa de preenchimento (leads ÷ cliques no link): ${parseFloat(Number(q.fillRate).toFixed(2))}%`);
     if (q.mqlRate != null) L.push(`Taxa de MQL: ${parseFloat(Number(q.mqlRate).toFixed(1))}% (${q.mqls} MQL de ${q.leadsTotal} leads, pela planilha de qualificação do cliente)`);
     if (q.sqlRate != null) L.push(`Taxa de SQL: ${parseFloat(Number(q.sqlRate).toFixed(1))}% (${q.sqls} reuniões/oportunidades)`);
@@ -764,10 +808,11 @@ function buildReportAnalysisPrompt(d) {
     `FORMATO OBRIGATÓRIO: ponto a ponto. Cada ponto começa com "## " seguido do título (o nome da métrica ou do bloco); na LINHA SEGUINTE, um parágrafo corrido analisando só aquele ponto. Deixe uma linha em branco entre os pontos.`,
     `Percorra a jornada NA ORDEM das métricas abaixo — um "## " para cada — comparando com o período anterior (a variação já vem nos dados) e explicando causa e efeito entre elas.`,
     benchLines ? `Para toda métrica que tiver BENCHMARK DE MERCADO listado abaixo, diga EXPLICITAMENTE no parágrafo dela se está acima ou abaixo do benchmark e o que isso significa (ex.: "o CTR de 7,11% está acima do benchmark de mercado, de 5%, indicando que o anúncio é relevante para o público"). Use os valores de benchmark exatamente como estão listados — não invente outros.` : "",
-    qualiLines ? `Depois das métricas de mídia e ANTES dos públicos, percorra a QUALIFICAÇÃO abaixo — um "## " para cada taxa listada (ex.: "## Taxa de preenchimento", "## Taxa de MQL") — analisando a qualidade dos leads: se a taxa de preenchimento indica atrito no formulário/LP, e se a taxa de MQL mostra que os leads estão dentro (ou fora) do perfil ideal.` : "",
+    qualiLines ? `Depois das métricas de mídia e ANTES dos públicos, percorra a QUALIFICAÇÃO abaixo — um "## " para cada taxa listada (ex.: "## Taxa de Conexão", "## Taxa de preenchimento", "## Taxa de MQL") — analisando a qualidade da jornada: a Taxa de Conexão mostra quantos cliques viraram sessão no site (abaixo do ideal = perda entre clique e visita, atacar velocidade/redirecionamento da página); a taxa de preenchimento indica atrito no formulário/LP; e a taxa de MQL mostra se os leads estão dentro (ou fora) do perfil ideal.` : "",
     (d.adsets && d.adsets.length) ? `Depois da jornada, adicione "## Públicos" com um parágrafo destacando o público de melhor CPL e de melhor CTR, e os mais caros que devem ter a verba realocada.` : "",
     (d.ads && d.ads.length) ? `Depois, adicione "## Anúncios" com um parágrafo destacando os anúncios de melhor resultado e os que devem ser trocados.` : "",
     `SEMPRE termine com "## Próximos Passos" e UM parágrafo com as ações concretas para o próximo mês que atacam os gargalos identificados neste mês (métricas que ficaram abaixo do esperado, públicos/anúncios caros para realocar verba, criativos a testar ou pausar, ajustes de segmentação/lance). Cite nomes e números específicos; nada genérico como "continuar otimizando".`,
+    d.obs ? `OBSERVAÇÕES DA ANALISTA — contexto real que explica os números e que você não teria como saber pelos dados. Incorpore cada observação COM NATURALIDADE dentro do parágrafo da métrica a que ela se refere, como causa do que aconteceu (ex.: "as impressões caíram 30% porque a correspondência das palavras-chave foi alterada para frase, o que reduziu o alcance"). NÃO crie seção/título separado pra elas, NÃO escreva "observação:", NÃO copie o texto cru — reescreva bem escrito. NÃO invente nada além do que está aqui:\n"""${String(d.obs).slice(0, 1500)}"""` : "",
     `REGRAS: já é a análise pronta — NÃO diga "vou analisar", NÃO diga "seguindo a jornada", NÃO explique seu método, NÃO repita estas instruções; comece direto no primeiro "## ". NÃO use traços, asteriscos, listas com marcador nem markdown — só "## " nos títulos e parágrafos normais. Use SOMENTE os dados abaixo; se algo for zero/ausente, comente com naturalidade sem inventar número. Tom profissional e claro, em português.`,
     `\nMÉTRICAS (jornada, na ordem):\n${kpiLines}`,
     benchLines ? `\nBENCHMARKS DE MERCADO (base de comparação — use exatamente estes):\n${benchLines}` : "",
@@ -784,6 +829,44 @@ async function aiReport(s, prompt) {
   return t;
 }
 ipcMain.handle("report:analyzeSection", async (_e, d) => aiReport(readStore().settings, buildReportAnalysisPrompt(d)));
+
+// análise CAMPANHA A CAMPANHA — cada campanha julgada pelo SEU objetivo (inferido do nome)
+function buildCampaignAnalysisPrompt(d) {
+  const brl = (v) => (v == null || isNaN(v)) ? "—" : "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const int = (v) => (v == null) ? "—" : Number(v).toLocaleString("pt-BR");
+  const pct = (v) => (v == null || isNaN(v)) ? "—" : parseFloat(Number(v).toFixed(2)) + "%";
+  const lines = (d.campaigns || []).map((c) => {
+    const P = [];
+    if (c.impressions != null) P.push(`Impressões ${int(c.impressions)}`);
+    if (c.clicks != null) P.push(`Cliques ${int(c.clicks)}`);
+    if (c.ctr != null) P.push(`CTR ${pct(c.ctr)}`);
+    if (c.videoViews) P.push(`Visualizações ${int(c.videoViews)}`);
+    if (c.sends != null) P.push(`Envios ${int(c.sends)}`);
+    if (c.opens != null) P.push(`Aberturas ${int(c.opens)}`);
+    if (c.openRate != null) P.push(`Taxa de abertura ${pct(c.openRate)}`);
+    if (c.clickRate != null) P.push(`Taxa de cliques ${pct(c.clickRate)}`);
+    if (c.conversions != null) P.push(`Conversões ${int(c.conversions)}`);
+    if (c.leads != null) P.push(`Leads ${int(c.leads)}`);
+    if (c.cpc != null) P.push(`CPC ${brl(c.cpc)}`);
+    if (c.cpa != null) P.push(`Custo por conversão ${brl(c.cpa)}`);
+    if (c.cpl != null) P.push(`CPL ${brl(c.cpl)}`);
+    if (c.cost != null) P.push(`Investido ${brl(c.cost)}`);
+    else if (c.spend != null) P.push(`Investido ${brl(c.spend)}`);
+    return `- ${c.name}: ${P.join(", ")}`;
+  }).join("\n");
+  return [
+    `Você é analista de mídia paga. Analise, UMA A UMA, as campanhas de ${d.label} do cliente "${d.clientName}" (${d.monthLabel}).`,
+    `PONTO CENTRAL: cada campanha tem um OBJETIVO diferente — descubra pelo NOME e julgue cada uma pela métrica que importa PRA ELA, nunca por uma régua única:`,
+    `• Vídeo / views / "aumentar tempo assistido" / impulsionamento de canal / YouTube / awareness / reconhecimento / institucional / alcance = TOPO de funil → avalie por visualizações, custo por visualização, alcance, impressões e CPM. NÃO penalize CTR baixo nem cobre leads/conversão dela — não é o objetivo.`,
+    `• Geração de leads / conversão / cadastro / formulário / vendas = FUNDO → avalie por conversões/leads, CTR, taxa de conversão e custo por conversão/CPL.`,
+    `• Tráfego / cliques / consideração = MEIO → avalie por cliques, CTR e CPC.`,
+    `FORMATO: para CADA campanha, comece com "## " seguido do NOME EXATO da campanha e, na linha seguinte, UM parágrafo dizendo (a) o objetivo dela pelo nome, (b) como performou nas métricas certas pra esse objetivo, citando os números, (c) se está boa, cara ou precisa de ajuste. Uma linha em branco entre as campanhas.`,
+    d.obs ? `OBSERVAÇÕES DA ANALISTA — contexto real que explica os números. Incorpore com naturalidade no parágrafo da campanha a que se refere, como causa do resultado. NÃO crie seção separada, NÃO escreva "observação:", NÃO copie cru — reescreva bem escrito. NÃO invente nada além disto:\n"""${String(d.obs).slice(0, 1500)}"""` : "",
+    `REGRAS: use SOMENTE os números abaixo, não invente. Já é o texto final — sem "vou analisar", sem traços/asteriscos/markdown além do "## ". Português claro e objetivo.`,
+    `\nCAMPANHAS:\n${lines || "(sem campanhas no período)"}`,
+  ].join("\n");
+}
+ipcMain.handle("report:analyzeCampaigns", async (_e, d) => aiReport(readStore().settings, buildCampaignAnalysisPrompt(d)));
 
 // análise de UMA métrica só (quando a analista adiciona uma métrica ao relatório)
 ipcMain.handle("report:analyzeMetric", async (_e, d) => {
@@ -1585,12 +1668,16 @@ async function gadsHeaders() {
 }
 
 // TERMOS DE BUSCA reais que dispararam anúncios (pra negativação)
-ipcMain.handle("googleads:searchTerms", async (_e, { customerId, start, end }) => {
+ipcMain.handle("googleads:searchTerms", async (_e, { customerId, start, end, campaignId, adGroupId }) => {
   const cid = String(customerId || "").replace(/-/g, "");
   if (!cid) throw new Error("Cliente sem conta Google vinculada.");
   const headers = await gadsHeaders();
+  // filtros opcionais: só os termos da campanha e/ou do grupo de anúncio escolhidos
+  let where = "";
+  if (campaignId) where += ` AND campaign.id = ${String(campaignId).replace(/[^0-9]/g, "")}`;
+  if (adGroupId) where += ` AND ad_group.id = ${String(adGroupId).replace(/[^0-9]/g, "")}`;
   // search_term_view.status diz se o termo JÁ foi negativado (EXCLUDED) ou virou palavra-chave (ADDED)
-  const query = `SELECT search_term_view.search_term, search_term_view.status, campaign.id, campaign.name, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM search_term_view WHERE segments.date BETWEEN '${start}' AND '${end}' ORDER BY metrics.cost_micros DESC LIMIT 300`;
+  const query = `SELECT search_term_view.search_term, search_term_view.status, campaign.id, campaign.name, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM search_term_view WHERE segments.date BETWEEN '${start}' AND '${end}'${where} ORDER BY metrics.cost_micros DESC LIMIT 300`;
   let pageToken = null; const out = [];
   do {
     const body = JSON.stringify(pageToken ? { query, pageToken } : { query });
@@ -2418,7 +2505,40 @@ async function googleReportSection(customerId, start, end, prevStart, prevEnd, n
   const extraMetrics = [];
   if (T.vv > 0) extraMetrics.push({ label: "Custo por visualização", kind: "brl", value: T.vv ? T.cost / T.vv : null, prev: P.vv ? P.cost / P.vv : null });
   if (T.vv > 0) extraMetrics.push({ label: "Taxa de visualização", kind: "pct", value: T.impr ? T.vv / T.impr * 100 : null, prev: P.impr ? P.vv / P.impr * 100 : null });
-  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, extraMetrics, blocks: [{ type: "analysis", id: "google-geral" }, { type: "title", text: "Todas as Campanhas" }, tbl, { type: "proximos", id: "google-proximos" }], raw: { totals: T, prev: P } };
+  const campaigns = rows.map((x) => ({ name: x.name, impressions: x.m.impr, clicks: x.m.clk, ctr: x.m.impr ? x.m.clk / x.m.impr * 100 : null, conversions: x.m.conv, videoViews: x.m.vv, cpc: x.m.clk ? x.m.cost / x.m.clk : null, cpa: x.m.conv ? x.m.cost / x.m.conv : null, cost: x.m.cost }));
+  // GRÁFICOS reais do Google (dado ao vivo da conta): dispositivo, idade, gênero e série temporal
+  const run = async (query) => { let pt = null, out = []; do { const r = await googleAdsApi(`customers/${cid}/googleAds:search`, { method: "POST", headers, body: JSON.stringify(pt ? { query, pageToken: pt } : { query }) }); out = out.concat(r.results || []); pt = r.nextPageToken; } while (pt && out.length < 2000); return out; };
+  const charts = {};
+  try { // série temporal: cliques + CTR por dia
+    const ts = await run(`SELECT segments.date, metrics.clicks, metrics.impressions FROM campaign WHERE segments.date BETWEEN '${start}' AND '${end}' AND metrics.impressions > 0`);
+    const byDay = {}; ts.forEach((r) => { const d = r.segments.date; (byDay[d] = byDay[d] || { clk: 0, impr: 0 }); byDay[d].clk += Number(r.metrics.clicks || 0); byDay[d].impr += Number(r.metrics.impressions || 0); });
+    const days = Object.keys(byDay).sort();
+    if (days.length) charts.timeseries = { labels: days.map((d) => { const p = d.split("-"); return `${p[2]}/${p[1]}/${p[0]}`; }), clicks: days.map((d) => byDay[d].clk), ctr: days.map((d) => byDay[d].impr ? byDay[d].clk / byDay[d].impr * 100 : 0) };
+  } catch {}
+  try { // dispositivo: cliques, conversões e custo → 3 pizzas
+    const dv = await run(`SELECT segments.device, metrics.clicks, metrics.conversions, metrics.cost_micros FROM campaign WHERE segments.date BETWEEN '${start}' AND '${end}' AND metrics.impressions > 0`);
+    const dmap = { MOBILE: "Mobile", DESKTOP: "Desktop", TABLET: "Tablet", CONNECTED_TV: "TV Conectada", OTHER: "Outro" };
+    const col = { Mobile: "#2563eb", Desktop: "#22c55e", Tablet: "#7cc4ff", "TV Conectada": "#f59e0b", Outro: "#94a3b8" };
+    const agg = {}; dv.forEach((r) => { const k = dmap[r.segments.device] || r.segments.device || "Outro"; (agg[k] = agg[k] || { clk: 0, conv: 0, cost: 0 }); agg[k].clk += Number(r.metrics.clicks || 0); agg[k].conv += Number(r.metrics.conversions || 0); agg[k].cost += Number(r.metrics.costMicros || 0) / 1e6; });
+    const keys = Object.keys(agg);
+    const pie = (mk) => keys.map((k) => ({ label: k, value: agg[k][mk], color: col[k] || "#94a3b8" })).filter((sl) => sl.value > 0);
+    if (keys.length) charts.devicePies = [{ title: "Cliques por Dispositivo", slices: pie("clk") }, { title: "Conversões por Dispositivo", slices: pie("conv") }, { title: "Custo por Dispositivo", slices: pie("cost") }].filter((p) => p.slices.length);
+  } catch {}
+  try { // idade (impressões)
+    const ag = await run(`SELECT ad_group_criterion.age_range.type, metrics.impressions FROM age_range_view WHERE segments.date BETWEEN '${start}' AND '${end}' AND metrics.impressions > 0`);
+    const amap = { AGE_RANGE_18_24: "18-24", AGE_RANGE_25_34: "25-34", AGE_RANGE_35_44: "35-44", AGE_RANGE_45_54: "45-54", AGE_RANGE_55_64: "55-64", AGE_RANGE_65_UP: "65+", AGE_RANGE_UNDETERMINED: "Desconhecido" };
+    const order = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+", "Desconhecido"], m = {};
+    ag.forEach((r) => { const k = amap[r.adGroupCriterion.ageRange.type] || "Desconhecido"; m[k] = (m[k] || 0) + Number(r.metrics.impressions || 0); });
+    const labels = order.filter((k) => m[k]); if (labels.length) charts.ageImpr = { labels, impressions: labels.map((k) => m[k]) };
+  } catch {}
+  try { // gênero (impressões)
+    const gd = await run(`SELECT ad_group_criterion.gender.type, metrics.impressions FROM gender_view WHERE segments.date BETWEEN '${start}' AND '${end}' AND metrics.impressions > 0`);
+    const gmap = { MALE: "Masculino", FEMALE: "Feminino", UNDETERMINED: "Desconhecido" };
+    const order = ["Masculino", "Feminino", "Desconhecido"], m = {};
+    gd.forEach((r) => { const k = gmap[r.adGroupCriterion.gender.type] || "Desconhecido"; m[k] = (m[k] || 0) + Number(r.metrics.impressions || 0); });
+    const labels = order.filter((k) => m[k]); if (labels.length) charts.genderImpr = { labels, impressions: labels.map((k) => m[k]) };
+  } catch {}
+  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, extraMetrics, charts, blocks: [{ type: "analysis", id: "google-geral" }, { type: "title", text: "Todas as Campanhas" }, tbl, { type: "analysis", id: "google-campanhas" }, { type: "proximos", id: "google-proximos" }], raw: { totals: T, prev: P, campaigns } };
 }
 
 function linkedinReportSection(li, prev, name) {
@@ -2450,7 +2570,8 @@ function linkedinReportSection(li, prev, name) {
   if (clicks > 0) extraMetrics.push({ label: "CPC médio", kind: "brl", value: spend / clicks, prev: pc ? pspend / pc : null });
   if (clicks > 0 && leads > 0) extraMetrics.push({ label: "Taxa de preenchimento", kind: "pct", value: rate(leads, clicks), prev: rate(pl, pc) });
   if (opens > 0) extraMetrics.push({ label: "Custo por abertura", kind: "brl", value: spend / opens, prev: po ? pspend / po : null });
-  return { platform: "linkedin", label: "LinkedIn Ads", subtitle: name || "", accent: "#0a66c2", topAccent: true, kpis, funnel, extraMetrics, blocks: [{ type: "analysis", id: "linkedin-geral" }, { type: "title", text: "Campanhas" }, tbl, { type: "proximos", id: "linkedin-proximos" }], raw: { totals: t, prev: p } };
+  const campaigns = camps.map((r) => { const m = r.metrics || {}, sp = spendOf(m), ld = n(m.leads), cl = n(m.clicks), op = n(m.opens), se = n(m.sends); return { name: r.name, sends: se, opens: op, clicks: cl, leads: ld, spend: sp, openRate: se ? op / se * 100 : null, clickRate: op ? cl / op * 100 : null, cpl: ld ? sp / ld : null }; });
+  return { platform: "linkedin", label: "LinkedIn Ads", subtitle: name || "", accent: "#0a66c2", topAccent: true, kpis, funnel, extraMetrics, blocks: [{ type: "analysis", id: "linkedin-geral" }, { type: "title", text: "Campanhas" }, tbl, { type: "analysis", id: "linkedin-campanhas" }, { type: "proximos", id: "linkedin-proximos" }], raw: { totals: t, prev: p, campaigns } };
 }
 
 // mapa nome-do-anúncio → miniatura do criativo (Meta), pra mostrar as imagens mesmo quando os
@@ -2532,7 +2653,8 @@ function googleLeanFromReportei(li, prev, name) {
   ];
   const camps = (li.rows || []).filter((r) => r.level === "campaign");
   const tbl = { type: "table", cols: [{ label: "Campanhas", l: true }, { label: "Impressões" }, { label: "Cliques", sort: true }, { label: "CTR (Taxa de Cliques)" }, { label: "CPC médio" }, { label: "Conversões" }, { label: "Custo por conversão" }, { label: "Custo" }], rows: camps.map((r) => { const m = r.metrics || {}, i = n(m.impressions), c = n(m.clicks), cv = n(m.conversions), co = n(m.cost != null ? m.cost : m.spend); return [{ v: r.name, l: true }, _en(i), _en(c), _pct(i ? c / i * 100 : null), _brl((m.cpc != null && Number(m.cpc)) ? Number(m.cpc) : (c ? co / c : null)), _en(cv), _brl(cv ? co / cv : null), _brl(co)]; }) };
-  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, blocks: [{ type: "analysis", id: "google-geral" }, { type: "title", text: "Todas as Campanhas" }, tbl, { type: "proximos", id: "google-proximos" }], raw: { totals: { impr, clk, conv, cost }, prev: P } };
+  const campaigns = camps.map((r) => { const m = r.metrics || {}, i = n(m.impressions), c = n(m.clicks), cv = n(m.conversions), co = n(m.cost != null ? m.cost : m.spend); return { name: r.name, impressions: i, clicks: c, ctr: i ? c / i * 100 : null, conversions: cv, cpc: c ? co / c : null, cpa: cv ? co / cv : null, cost: co }; });
+  return { platform: "google", label: "Google Ads", subtitle: name || "", accent: "#16a34a", topAccent: true, kpis, blocks: [{ type: "analysis", id: "google-geral" }, { type: "title", text: "Todas as Campanhas" }, tbl, { type: "analysis", id: "google-campanhas" }, { type: "proximos", id: "google-proximos" }], raw: { totals: { impr, clk, conv, cost }, prev: P, campaigns } };
 }
 
 ipcMain.handle("report:build", async (_e, { projectId, start, end, prevStart, prevEnd }) => {
@@ -2564,6 +2686,12 @@ ipcMain.handle("report:build", async (_e, { projectId, start, end, prevStart, pr
   // QUALIFICAÇÃO: taxa de preenchimento (leads ÷ cliques) sempre; MQL/SQL só quando o cliente tem planilha de leads configurada
   let leadsQ = null;
   if (client && client.leads && client.leads.sheetUrl) { try { leadsQ = await leadsSummary(client.leads, start, end); } catch (e) { notes.push("Leads (MQL): " + (e.message || e)); } }
+  // TAXA DE CONEXÃO: sessões que vieram do anúncio (GA4, mídia paga: Paid Search/Social) ÷ cliques — quando há GA4 vinculado
+  let ga4 = null;
+  if (client && client.adAccounts && client.adAccounts.ga4PropertyId) {
+    try { ga4 = await ga4Sessions(client.adAccounts.ga4PropertyId, start, end); } catch (e) { notes.push("GA4 (Taxa de Conexão): " + (e.message || e)); }
+  }
+  const connBench = (client && client.benchmarks && client.benchmarks.connectRate) || 80;
   withData.forEach((sec) => {
     const kget = (re) => { const k = (sec.kpis || []).find((x) => re.test(x.label)); return k && k.value != null ? Number(k.value) : null; };
     const q = {};
@@ -2571,13 +2699,32 @@ ipcMain.handle("report:build", async (_e, { projectId, start, end, prevStart, pr
       const clk = kget(/clique/i), ld = kget(/cadastro|leads/i);
       if (clk > 0 && ld > 0) q.fillRate = ld / clk * 100;
     }
+    if (ga4 && (sec.platform === "google" || sec.platform === "meta")) {
+      const sess = sec.platform === "google" ? ga4.google : ga4.meta;
+      const clk = kget(/clique/i);
+      if (sess > 0 && clk > 0) { q.connectRate = sess / clk * 100; q.connectSessions = sess; q.connectClicks = clk; q.connectBench = connBench; }
+    }
     const lp = leadsQ && leadsQ.byPlatform && leadsQ.byPlatform[sec.platform];
     if (lp && lp.total > 0) { q.mqls = lp.mqls; q.mqlRate = lp.mqlRate; q.leadsTotal = lp.total; if (leadsQ.hasSql) { q.sqls = lp.sqls; q.sqlRate = lp.sqlRate; } }
     if (Object.keys(q).length) sec.quali = q;
   });
-  // OTIMIZAÇÕES realizadas na conta no período (log de ações do app) — review pra mostrar ao cliente
+  // OTIMIZAÇÕES realizadas no mês — puxadas da coluna "Concluído" do Trello (data em que o card
+  // foi concluído + link). O review vira um texto GERAL do que foi feito; os cards viram links.
+  let optimAdded = false;
+  if (client && client.trelloBoardId && st.settings.trelloKey && st.settings.trelloToken) {
+    try {
+      const done = await trelloDoneCardsInMonth(st.settings, client.trelloBoardId, start, end);
+      if (done.cards.length) {
+        withData.push({ platform: "otimizacoes", label: "Otimizações realizadas", subtitle: cname || "", accent: "#16a34a",
+          trelloListName: done.listName, trelloCards: done.cards.map((c) => ({ name: c.name, url: c.url, labels: c.labels, date: c.date ? c.date.split("-").reverse().join("/") : "" })),
+          blocks: [{ type: "analysis", id: "otim-review" }] });
+        optimAdded = true;
+      }
+    } catch (e) { notes.push("Trello (otimizações): " + (e.message || e)); }
+  }
+  // fallback: sem board vinculado ou sem cards concluídos → usa o log de ações do próprio app
   const acts = (st.actions || []).filter((a) => a.projectId === projectId && a.at && a.at.slice(0, 10) >= start && a.at.slice(0, 10) <= end);
-  if (acts.length) {
+  if (!optimAdded && acts.length) {
     const platOf = (s) => { const t = String(s || "").toLowerCase(); return /google/.test(t) ? "google" : /linkedin/.test(t) ? "linkedin" : /(meta|facebook|instagram)/.test(t) ? "meta" : "geral"; };
     const icoOf = (type) => ({ negativacao: "🚫", keyword: "➕", toggle: "⚙️", creative: "🎨", ekyte: "📋" }[type] || "•");
     const labelOf = { meta: "Meta Ads", google: "Google Ads", linkedin: "LinkedIn Ads", geral: "Geral" };
@@ -2589,14 +2736,19 @@ ipcMain.handle("report:build", async (_e, { projectId, start, end, prevStart, pr
   return { sections: withData, notes };
 });
 
-// review das otimizações realizadas (pra apresentar ao cliente)
+// review das otimizações: texto GERAL e descritivo do que foi feito (não é carta pro cliente).
+// Prioriza os cards concluídos do Trello; cai pro log de ações do app se não vier Trello.
 ipcMain.handle("report:reviewOptimizations", async (_e, d) => {
-  const lines = (d.groups || []).map((g) => `${g.label}:\n` + (g.items || []).map((it) => `- ${it.text}${it.detail ? ` (${it.detail})` : ""}`).join("\n")).join("\n\n");
+  const cards = d.trelloCards || [];
+  const source = cards.length
+    ? "CONCLUÍDO NO MÊS (cards da coluna de concluído do Trello):\n" + cards.map((c) => `- ${c.name}${c.date ? ` [${c.date}]` : ""}`).join("\n")
+    : "OTIMIZAÇÕES REALIZADAS:\n" + (d.groups || []).map((g) => `${g.label}:\n` + (g.items || []).map((it) => `- ${it.text}${it.detail ? ` (${it.detail})` : ""}`).join("\n")).join("\n\n");
   const prompt = [
-    `Você é analista de mídia paga. Escreva um REVIEW das otimizações que foram realizadas na conta do cliente "${d.clientName || ""}" em ${d.monthLabel || "no período"}, para apresentar AO CLIENTE — tom profissional, mostrando o valor do trabalho feito.`,
-    `FORMATO: para CADA plataforma com otimizações, comece com "## " seguido do nome da plataforma e, na linha seguinte, UM parágrafo explicando o que foi feito e o porquê (o benefício pra performance da conta). Deixe uma linha em branco entre os pontos.`,
-    `REGRAS: use SOMENTE as otimizações listadas abaixo, não invente nenhuma. Já é o texto final — sem "vou analisar", sem traços/asteriscos/markdown além do "## ". Português, claro e objetivo.`,
-    `\nOTIMIZAÇÕES REALIZADAS:\n${lines}`,
+    `Você é analista de mídia paga. Descreva de forma objetiva O QUE FOI FEITO na conta do cliente "${d.clientName || ""}" em ${d.monthLabel || "no período"}, com base no que foi concluído abaixo.`,
+    `TOM: descritivo e factual — só relata o que foi executado no mês. NÃO é carta pro cliente: NÃO venda o trabalho, NÃO agradeça, NÃO prometa nada pro futuro, NÃO use "focaremos/vamos/pretendemos". Escreva no passado ("foram ajustados", "pausamos", "foi feito").`,
+    `FORMATO: UM único parágrafo corrido — sem títulos "## ", sem listas, sem marcadores, sem markdown, sem traços nem asteriscos. Agrupe as ações por tema quando fizer sentido. NÃO cite card por card nem links (os links dos cards aparecem à parte no relatório).`,
+    `REGRAS: use SOMENTE o que está listado abaixo, não invente nenhuma ação. Já é o texto final — comece direto na descrição. Português claro.`,
+    `\n${source}`,
   ].join("\n");
   return aiReport(readStore().settings, prompt);
 });
@@ -2605,7 +2757,7 @@ ipcMain.handle("report:reviewOptimizations", async (_e, d) => {
 ipcMain.handle("linkedin:test", async () => {
   const s = readStore().settings;
   const tok = (s.linkedinToken || "").trim();
-  if (!tok) return { ok: false, msg: "Cole o Access Token do LinkedIn primeiro. A chave secret (Client Secret) sozinha não puxa dados — ela serve pra gerar o token via login." };
+  if (!tok) return { ok: false, msg: "Ainda não conectado. Cole o Client ID + Client Secret e clique em '🔗 Conectar com LinkedIn' — o acesso é gerado automaticamente pelo login (você não precisa de Access Token)." };
   const headers = { Authorization: `Bearer ${tok}`, "X-Restli-Protocol-Version": "2.0.0" };
   try {
     const r = await fetch("https://api.linkedin.com/v2/adAccountsV2?q=search&start=0&count=10", { headers });
@@ -2619,9 +2771,34 @@ ipcMain.handle("linkedin:test", async () => {
   } catch (e) { return { ok: false, msg: "Erro de rede: " + e.message }; }
 });
 
-// LinkedIn OAuth: abre o navegador pra autorizar e troca o code por um Access Token (guarda no app)
-ipcMain.handle("linkedin:connect", async (_e, { clientId, clientSecret }) => {
+// LinkedIn OAuth. Por padrão tenta SÓ o 2-legged (client_credentials): gera o acesso apenas com
+// Client ID + Secret, sem login de usuário e SEM abrir navegador. Se falhar, explica o motivo.
+// O fluxo com navegador (3-legged) só roda quando allowBrowser=true (botão "Conectar pelo navegador").
+ipcMain.handle("linkedin:connect", async (_e, { clientId, clientSecret, allowBrowser }) => {
   if (!clientId || !clientSecret) throw new Error("Cole o Client ID e o Client Secret primeiro.");
+  // 1) 2-legged (client_credentials) — sem navegador, sem login de usuário
+  let twoErr = "";
+  try {
+    const r0 = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret, scope: "r_ads r_ads_reporting rw_ads" }),
+    });
+    const t0 = await r0.json().catch(() => ({}));
+    if (r0.ok && t0.access_token) {
+      const st0 = readStore();
+      st0.settings.linkedinClientId = clientId;
+      st0.settings.linkedinClientSecret = clientSecret;
+      st0.settings.linkedinToken = t0.access_token;
+      writeStore(st0);
+      return { ok: true, mode: "client_credentials", expiresInDays: t0.expires_in ? Math.round(t0.expires_in / 86400) : null };
+    }
+    twoErr = t0.error_description || t0.error || `HTTP ${r0.status}`;
+  } catch (e) { twoErr = e.message || String(e); }
+  // Sem navegador: se o 2-legged não rolar, explica por quê (NÃO abre o navegador, não trava com timeout)
+  if (!allowBrowser) {
+    throw new Error(`Não deu pra conectar sem navegador. O LinkedIn recusou o modo automático (client_credentials): "${twoErr}". Isso quase sempre significa que o app do LinkedIn não tem um produto que libere acesso por client_credentials — a API de Anúncios normalmente exige o login do dono das contas de anúncio. Caminhos: (1) peça pra quem tem esse login clicar em "Conectar pelo navegador" uma vez, ou (2) habilite um produto 2-legged no app em LinkedIn Developers.`);
+  }
+  // 2) 3-legged (navegador) — só quando explicitamente pedido
   const http = require("http");
   const PORT = 42815;
   const redirectUri = `http://localhost:${PORT}`;
@@ -2668,7 +2845,7 @@ ipcMain.handle("report:exportPdf", async (_e, { html, title }) => {
     @page{size:A4;margin:12mm}
     body{margin:0}
     .rr-page{max-width:none;padding:0}
-    .rr-remove,.rr-clock,.rr-kpi-x,.rr-addmetric-wrap,.rr-metricmenu{display:none!important}
+    .rr-remove,.rr-clock,.rr-kpi-x,.rr-addmetric-wrap,.rr-metricmenu,.rr-trello-x,.rr-obs{display:none!important}
     .rr-tbl-wrap{overflow:visible!important}
     table.rr-tbl{width:100%!important;table-layout:fixed!important;font-size:10px!important}
     table.rr-tbl th:first-child,table.rr-tbl td:first-child{width:22%!important}
@@ -3435,6 +3612,17 @@ ipcMain.handle("meta:toggleAd", async (_e, { adId, status }) => {
   const s = readStore().settings;
   if (!s.metaToken) throw new Error("Token Meta não configurado.");
   return httpJson(`${GRAPH}/${adId}?status=${status}&access_token=${encodeURIComponent(s.metaToken)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+});
+
+// duplica um anúncio (com o criativo) — cópia PAUSADA no MESMO conjunto (ou em outro, se adSetId vier).
+// Usa o endpoint /{ad_id}/copies do Meta. Retorna o id do anúncio novo.
+ipcMain.handle("meta:duplicateAd", async (_e, { adId, adSetId }) => {
+  const s = readStore().settings;
+  if (!s.metaToken) throw new Error("Token Meta não configurado.");
+  const body = new URLSearchParams({ status_option: "PAUSED", access_token: s.metaToken });
+  if (adSetId) body.set("adset_id", String(adSetId).replace(/^.*_/, "")); // opcional: destino
+  const r = await httpJson(`${GRAPH}/${adId}/copies`, { method: "POST", body });
+  return { ok: true, newId: r.copied_ad_id || r.ad_id || r.id || null };
 });
 
 /* ---------------------------------------------------------- */

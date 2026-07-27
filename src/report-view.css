@@ -82,6 +82,19 @@
 .rr-delta.up { color: var(--rr-up); background: var(--rr-up-bg); }
 .rr-delta.down { color: var(--rr-down); background: var(--rr-down-bg); }
 .rr-delta.flat { color: var(--rr-muted); background: #f1f3f6; }
+.rr-delta-edit { cursor: pointer; }
+.rr-delta-edit:hover { outline: 2px solid #c7d6f5; outline-offset: 1px; }
+
+/* -------- observações da analista (só na edição; escondidas no PDF) -------- */
+.rr-obs { margin: 18px 2px; padding: 12px 14px; border: 1px dashed #c7d6f5; border-radius: 10px; background: #f7faff; }
+.rr-obs-title { font-size: 12px; font-weight: 800; color: #4a6da7; margin-bottom: 8px; }
+.rr-obs-txt { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; font-size: 13px; color: var(--rr-ink); border: 1px solid #d8e2f3; border-radius: 8px; padding: 8px 10px; outline: none; background: #fff; }
+.rr-obs-txt:focus { border-color: #7ba3e3; box-shadow: 0 0 0 2px #e7eefd; }
+.rr-obs-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.rr-obs-apply { border: 0; background: #2563eb; color: #fff; font-weight: 700; font-size: 12px; padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+.rr-obs-apply:hover { background: #1d4ed8; }
+.rr-obs-apply:disabled { opacity: .6; cursor: default; }
+.rr-obs-msg { font-size: 12px; color: var(--rr-muted); }
 .rr-kpi .k-prev { font-size: 11.5px; color: var(--rr-muted); margin-top: 5px; }
 .rr-kpi .k-prev b { color: var(--rr-ink-2); font-weight: 700; }
 /* linha de KPIs "grandes" centralizados (ex.: Custo por leads + Valor investido) */
@@ -159,6 +172,18 @@ table.rr-tbl .r-sub { display: block; font-size: 11px; color: var(--rr-muted); f
 .rr-optim-det { color: var(--rr-muted); font-size: 12px; }
 .rr-optim-date { flex: 0 0 auto; color: var(--rr-muted); font-size: 11.5px; margin-left: auto; white-space: nowrap; }
 .rr-optim-list[contenteditable="true"]:focus { outline: none; background: #fbfcfe; box-shadow: 0 0 0 2px #e7eefd; border-radius: 8px; }
+/* -------- cards concluídos no Trello (links) -------- */
+.rr-trello-list { list-style: none; margin: 0 2px 18px; padding: 0; }
+.rr-trello-list li { display: flex; align-items: baseline; gap: 10px; padding: 9px 4px; border-bottom: 1px solid #f1f3f6; font-size: 13.5px; }
+.rr-trello-list li:last-child { border-bottom: 0; }
+.rr-trello-link { color: #0a66c2; text-decoration: none; font-weight: 600; cursor: pointer; flex: 0 0 auto; }
+.rr-trello-list li > .rr-trello-link:only-of-type { flex: 1; }
+.rr-trello-link:hover { text-decoration: underline; }
+.rr-trello-ico { flex: 0 0 auto; }
+.rr-trello-name { flex: 1; color: #0a66c2; font-weight: 600; outline: none; }
+.rr-trello-name[contenteditable="true"]:focus { background: #fbfcfe; box-shadow: 0 0 0 2px #e7eefd; border-radius: 6px; padding: 1px 4px; margin: -1px -4px; }
+.rr-trello-x { flex: 0 0 auto; margin-left: 6px; border: 0; background: transparent; color: #c0392b; font-size: 12px; cursor: pointer; opacity: .55; padding: 2px 6px; border-radius: 6px; }
+.rr-trello-x:hover { opacity: 1; background: #fdecea; }
 
 /* -------- próximos passos (por plataforma, com base nos gargalos) -------- */
 .rr-nextsteps { margin: 22px 0 8px; padding: 16px 20px; border: 1px solid var(--rr-card-line); border-left: 4px solid var(--rr-accent, var(--rr-meta)); border-radius: 10px; background: #fbfcfe; }

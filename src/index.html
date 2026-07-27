@@ -190,6 +190,8 @@
     <section id="view-termos" class="wrap hidden">
       <div class="topbar">
         <div class="field"><label>Cliente (Google Ads)</label><select id="termClientSel"></select></div>
+        <div class="field"><label>Campanha (Pesquisa)</label><select id="termCampSel" style="min-width:200px"><option value="">Todas as campanhas</option></select></div>
+        <div class="field"><label>Grupo de anúncio</label><select id="termAgSel" style="min-width:180px"><option value="">Todos os grupos</option></select></div>
         <div class="field"><label>Período</label>
           <select id="termPeriod" style="min-width:150px">
             <option value="7">Últimos 7 dias</option>
@@ -440,15 +442,15 @@
         <p class="sub" style="margin-top:6px">Cola o Client ID + Secret e clica em Conectar — o navegador abre pra você autorizar e o app guarda o acesso sozinho. <input type="hidden" id="cfgGadsRef"></p>
         <span class="help"><button class="chip-btn" id="gadsTestBtn">testar conexão</button> <span id="gadsTestMsg"></span></span>
         <div class="formrow" style="border-top:1px solid var(--line);padding-top:14px">
-          <label>LinkedIn Ads — Access Token (pra puxar dados e negativar demografia) <a class="ext" href="https://www.linkedin.com/developers/apps" style="font-size:11px;color:var(--accent);margin-left:6px;text-decoration:none">onde pegar ↗</a></label>
-          <input type="password" id="cfgLinkedinToken" placeholder="token de acesso (scopes r_ads, r_ads_reporting, rw_ads)">
+          <label>LinkedIn Ads — conexão (pra puxar dados e negativar demografia) <a class="ext" href="https://www.linkedin.com/developers/apps" style="font-size:11px;color:var(--accent);margin-left:6px;text-decoration:none">criar app ↗</a></label>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <div class="formrow" style="flex:1;min-width:200px"><label>Client ID (do app LinkedIn Developers)</label><input type="password" id="cfgLiCid" placeholder="86xxxxxx"></div>
           <div class="formrow" style="flex:1;min-width:160px"><label>Client Secret (a chave secret)</label><input type="password" id="cfgLiSec" placeholder="a chave secret"></div>
         </div>
-        <span class="help"><button class="chip-btn" id="liConnectBtn">🔗 Conectar com LinkedIn</button> <button class="chip-btn" id="liTestBtn">testar conexão</button> <span id="liTestMsg"></span></span>
-        <p class="sub" style="margin-top:8px">Cola o <b>Client ID + Client Secret</b> e clica em <b>Conectar</b> — o navegador abre pra você autorizar e o app gera e guarda o Access Token sozinho.</p>
+        <input type="hidden" id="cfgLinkedinToken">
+        <span class="help"><button class="chip-btn" id="liConnectBtn">🔗 Conectar (sem navegador)</button> <button class="chip-btn" id="liConnectBrowserBtn">🌐 Conectar pelo navegador</button> <button class="chip-btn" id="liTestBtn">testar conexão</button> <span id="liTestMsg"></span></span>
+        <p class="sub" id="liStatus" style="margin-top:8px">Cola o <b>Client ID + Client Secret</b> (você NÃO precisa de Access Token). Tente primeiro <b>Conectar (sem navegador)</b> — gera o acesso só com essas chaves. Se o LinkedIn recusar, use <b>Conectar pelo navegador</b> (aí quem tem o login do dono das contas de anúncio autoriza uma vez).</p>
         <p class="sub" style="margin-top:4px">⚠️ Antes de conectar: no seu app em <b>LinkedIn Developers → Auth</b>, adicione EXATAMENTE esta URL em "Authorized redirect URLs": <code>http://localhost:42815</code>. E o app precisa ter o produto <b>"Advertising API"</b> aprovado (scopes <code>r_ads</code>/<code>r_ads_reporting</code> pra ler demografia, <code>rw_ads</code> pra negativar) — sem isso o LinkedIn recusa.</p>
       </div>
 

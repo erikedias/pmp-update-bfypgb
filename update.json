@@ -1,6 +1,6 @@
 {
-  "version": "1.3.30",
-  "notes": "LinkedIn: agora dá pra conectar com Client ID + Client Secret (botão 'Conectar com LinkedIn') — o navegador abre, você autoriza e o app gera e guarda o Access Token sozinho (igual o Google Ads). Antes de conectar, cadastre a URL http://localhost:42815 no seu app do LinkedIn Developers e tenha o produto Advertising API liberado.",
+  "version": "1.3.31",
+  "notes": "LinkedIn conecta sem navegador (2-legged) + botão pelo navegador; Relatórios: análise por campanha ciente do objetivo, otimizações puxadas do Trello (Concluído, por data do card) com links editáveis, bloco de Observações que enriquece o texto e não sai no PDF, cor do delta por bom/ruim (custo subindo = vermelho, clicável pra inverter); Termos de busca por campanha e grupo de anúncio; Meta Ads: duplicar anúncio (cópia pausada).",
   "files": [
     "src/app.js",
     "src/engine.js",

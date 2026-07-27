@@ -105,6 +105,7 @@ $$(".nav .tab").forEach((b) => b.addEventListener("click", () => {
   b.classList.add("active");
   ALL_VIEWS.forEach((v) => $("#view-" + v).classList.toggle("hidden", v !== b.dataset.view));
   if (b.dataset.view === "semana") renderSemana();
+  if (b.dataset.view === "termos" && $("#termCampSel") && !$("#termCampSel").value && $("#termCampSel").options.length <= 1) loadTermCampaigns();
   if (b.dataset.view === "kw") loadKw();
   if (b.dataset.view === "historico") renderHistory();
   if (b.dataset.view === "perfil") loadPerfil();
@@ -224,25 +225,30 @@ function fillConfig() {
   $("#cfgGadsSec").value = s.googleAdsClientSecret || "";
   $("#cfgGadsRef").value = s.googleAdsRefreshToken || "";
   $("#cfgGadsMcc").value = s.googleAdsLoginCustomerId || "";
-  if ($("#cfgLinkedinToken")) { $("#cfgLinkedinToken").value = s.linkedinToken || ""; $("#cfgLiCid").value = s.linkedinClientId || ""; $("#cfgLiSec").value = s.linkedinClientSecret || ""; }
+  if ($("#cfgLinkedinToken")) { $("#cfgLinkedinToken").value = s.linkedinToken || ""; $("#cfgLiCid").value = s.linkedinClientId || ""; $("#cfgLiSec").value = s.linkedinClientSecret || ""; if ($("#liStatus") && s.linkedinToken) { $("#liStatus").innerHTML = "✅ <b>Conectado</b> — o acesso já foi gerado automaticamente pelo login. Use <b>testar conexão</b> pra conferir as contas."; } }
   $("#cfgReportTemplate").value = s.reportTemplate || "";
   if ($("#cfgAiEngine")) $("#cfgAiEngine").value = s.aiEngine || "gemini";
   renderMyClients();
 }
-const liConnectBtn = document.getElementById("liConnectBtn");
-if (liConnectBtn) liConnectBtn.addEventListener("click", async () => {
+async function liDoConnect(allowBrowser) {
   const m = $("#liTestMsg");
   const clientId = $("#cfgLiCid").value.trim(), clientSecret = $("#cfgLiSec").value.trim();
   if (!clientId || !clientSecret) { m.textContent = "Cole o Client ID e o Client Secret primeiro."; m.style.color = "#e0857a"; return; }
-  m.textContent = "abrindo o LinkedIn pra autorizar…"; m.style.color = "var(--muted)";
+  m.textContent = allowBrowser ? "abrindo o LinkedIn pra autorizar…" : "conectando sem navegador…"; m.style.color = "var(--muted)";
   try {
-    const r = await window.api.linkedinConnect({ clientId, clientSecret });
+    const r = await window.api.linkedinConnect({ clientId, clientSecret, allowBrowser });
     state.settings = await window.api.getSettings();
     $("#cfgLinkedinToken").value = state.settings.linkedinToken || "";
-    m.textContent = "✅ Conectado!" + (r.expiresInDays ? ` (token válido ~${r.expiresInDays} dias)` : "") + " — clique em testar conexão.";
+    const how = r.mode === "client_credentials" ? " (sem navegador)" : "";
+    m.textContent = "✅ Conectado!" + how + (r.expiresInDays ? ` (acesso válido ~${r.expiresInDays} dias)` : "") + " — clique em testar conexão.";
     m.style.color = "var(--accent)";
+    if ($("#liStatus")) $("#liStatus").innerHTML = "✅ <b>Conectado</b>" + how + " — o acesso já foi gerado. Use <b>testar conexão</b> pra conferir as contas.";
   } catch (e) { m.textContent = "❌ " + e.message; m.style.color = "#e0857a"; }
-});
+}
+const liConnectBtn = document.getElementById("liConnectBtn");
+if (liConnectBtn) liConnectBtn.addEventListener("click", () => liDoConnect(false));
+const liConnectBrowserBtn = document.getElementById("liConnectBrowserBtn");
+if (liConnectBrowserBtn) liConnectBrowserBtn.addEventListener("click", () => liDoConnect(true));
 const liTestBtn = document.getElementById("liTestBtn");
 if (liTestBtn) liTestBtn.addEventListener("click", async () => {
   const m = $("#liTestMsg"); m.textContent = "testando…";
@@ -1016,7 +1022,16 @@ function kpisHtml(results) {
     { l: "Gargalos abertos", v: gargalos, s: "campanhas abaixo do benchmark", alert: gargalos > 0 },
     { l: "Itens de otimização", v: items, s: "pro checklist do Trello" },
   ];
-  return `<div class="kpis">${k.map((x) => `<div class="kpi ${x.alert ? "alert" : ""}"><div class="k-label">${x.l}</div><div class="k-val">${x.v}</div><div class="k-sub">${x.s}</div></div>`).join("")}</div>`;
+  // Taxa de Conexão (GA4): sessões que vieram do anúncio ÷ cliques (só mídia paga — Paid Search/Social)
+  const cli = currentClient() || {};
+  const connBench = (cli.benchmarks && cli.benchmarks.connectRate) || 80;
+  const paidSess = state.ga4 ? ((state.ga4.google || 0) + (state.ga4.meta || 0)) : 0;
+  const paidClicks = (meta?.totals.clicks || 0) + (google?.totals.clicks || 0);
+  if (paidSess && paidClicks) {
+    const conn = paidSess / paidClicks * 100;
+    k.push({ l: "Taxa de Conexão", v: conn.toFixed(0) + "%", s: `${E.fmt.n(paidSess)} sessões ÷ ${E.fmt.n(paidClicks)} cliques · ideal ≥ ${connBench}%`, alert: conn < connBench, good: conn >= connBench });
+  }
+  return `<div class="kpis">${k.map((x) => `<div class="kpi ${x.alert ? "alert" : ""}"><div class="k-label">${x.l}</div><div class="k-val"${x.good ? ' style="color:var(--accent)"' : ""}>${x.v}</div><div class="k-sub">${x.s}</div></div>`).join("")}</div>`;
 }
 
 async function renderLeadsCard() {
@@ -2056,6 +2071,58 @@ function copyKw(kind) {
    ============================================================ */
 function termClient() { return state.clients.find((c) => c.projectId === Number($("#termClientSel").value)) || null; }
 
+// datas do período escolhido (7/14/30 dias ou datas específicas). null = datas custom incompletas
+function termDates() {
+  const iso = (d) => d.toISOString().slice(0, 10);
+  if ($("#termPeriod").value === "custom") {
+    let s = $("#termStart").value, e = $("#termEnd").value;
+    if (!s || !e) return null;
+    if (s > e) { const t = s; s = e; e = t; }
+    return { start: s, end: e };
+  }
+  const days = Number($("#termPeriod").value);
+  const end = new Date(); const start = new Date(); start.setDate(end.getDate() - days);
+  return { start: iso(start), end: iso(end) };
+}
+
+// carrega as campanhas de PESQUISA do cliente no seletor (a negativação de termos só faz sentido em Search)
+async function loadTermCampaigns() {
+  const camp = $("#termCampSel"), ag = $("#termAgSel");
+  if (!camp) return;
+  const c = termClient(); const gid = c && c.adAccounts && c.adAccounts.google;
+  camp.innerHTML = '<option value="">Todas as campanhas</option>';
+  if (ag) ag.innerHTML = '<option value="">Todos os grupos</option>';
+  if (!gid) return;
+  const dts = termDates(); if (!dts) return;
+  camp.disabled = true; camp.innerHTML = '<option value="">carregando…</option>';
+  try {
+    const list = await window.api.gadsCampaigns({ customerId: gid, start: dts.start, end: dts.end });
+    const search = (list || []).filter((x) => !x.channelType || x.channelType === "SEARCH");
+    camp.innerHTML = '<option value="">Todas as campanhas</option>' +
+      search.map((x) => `<option value="${x.id}">${(x.name || x.id).replace(/</g, "&lt;")}</option>`).join("");
+  } catch (e) { camp.innerHTML = '<option value="">Todas as campanhas</option>'; toast("Não consegui listar campanhas: " + e.message, true); }
+  camp.disabled = false;
+}
+
+// carrega os grupos de anúncio da campanha escolhida
+async function loadTermAdGroups() {
+  const camp = $("#termCampSel"), ag = $("#termAgSel");
+  if (!ag) return;
+  ag.innerHTML = '<option value="">Todos os grupos</option>';
+  const c = termClient(); const gid = c && c.adAccounts && c.adAccounts.google;
+  const campaignId = camp && camp.value;
+  if (!gid || !campaignId) return;
+  const dts = termDates(); if (!dts) return;
+  ag.disabled = true; ag.innerHTML = '<option value="">carregando…</option>';
+  try {
+    const list = await window.api.gadsAdGroups({ customerId: gid, campaignId, start: dts.start, end: dts.end });
+    ag.innerHTML = '<option value="">Todos os grupos</option>' +
+      (list || []).map((x) => `<option value="${x.id}">${(x.name || x.id).replace(/</g, "&lt;")}</option>`).join("");
+  } catch (e) { ag.innerHTML = '<option value="">Todos os grupos</option>'; toast("Não consegui listar grupos: " + e.message, true); }
+  ag.disabled = false;
+}
+const _termCampSel = $("#termCampSel"); if (_termCampSel) _termCampSel.addEventListener("change", loadTermAdGroups);
+
 // período personalizado: mostra/esconde os campos de data
 $("#termPeriod").addEventListener("change", (e) => {
   const custom = e.target.value === "custom";
@@ -2065,6 +2132,7 @@ $("#termPeriod").addEventListener("change", (e) => {
     const end = new Date(); const start = new Date(); start.setDate(end.getDate() - 7);
     $("#termStart").value = iso(start); $("#termEnd").value = iso(end);
   }
+  if (!custom) loadTermCampaigns(); // período pronto → recarrega campanhas do intervalo
 });
 
 $("#termBtn").addEventListener("click", async () => {
@@ -2082,11 +2150,15 @@ $("#termBtn").addEventListener("click", async () => {
     const end = new Date(); const start = new Date(); start.setDate(end.getDate() - days);
     startIso = iso(start); endIso = iso(end);
   }
-  body.innerHTML = `<div class="state"><div class="big">⏳</div>Puxando os termos de busca do Google…</div>`;
+  const campaignId = ($("#termCampSel") || {}).value || "";
+  const adGroupId = ($("#termAgSel") || {}).value || "";
+  const escopo = campaignId ? (($("#termCampSel").selectedOptions[0] || {}).textContent || "").trim() + (adGroupId ? " · " + (($("#termAgSel").selectedOptions[0] || {}).textContent || "").trim() : "") : "todas as campanhas";
+  body.innerHTML = `<div class="state"><div class="big">⏳</div>Puxando os termos de busca do Google (${escopo})…</div>`;
   $("#termNegBtn").classList.add("hidden");
   try {
-    const terms = await window.api.googleAdsSearchTerms({ customerId: gid, start: startIso, end: endIso });
-    if (!terms.length) { body.innerHTML = `<div class="state"><div class="big">🔎</div>Nenhum termo de busca no período (só campanhas de Pesquisa geram esses dados).</div>`; return; }
+    const terms = await window.api.googleAdsSearchTerms({ customerId: gid, start: startIso, end: endIso, campaignId, adGroupId });
+    if (!terms.length) { body.innerHTML = `<div class="state"><div class="big">🔎</div>Nenhum termo de busca no período para <b>${escopo}</b> (só campanhas de Pesquisa geram esses dados).</div>`; return; }
+    state.termScope = escopo;
     const service = termServico(c);
     body.innerHTML = `<div class="state"><div class="big">🤖</div>A IA está avaliando ${terms.length} termos com base no que o cliente faz…</div>`;
     const neg = {}, add = {};
@@ -2118,6 +2190,7 @@ function termServico(c) {
 $("#termClientSel").addEventListener("change", () => {
   const c = termClient(); const prof = (c && c.profile) || {};
   $("#termService").value = [prof.servico || prof.oQueFaz, prof.oQueNaoFaz ? "NÃO faz: " + prof.oQueNaoFaz : ""].filter(Boolean).join(". ");
+  loadTermCampaigns(); // troca de cliente → recarrega as campanhas de Pesquisa
 });
 
 function renderTermos(neg, add) {
@@ -2180,7 +2253,8 @@ async function doNegate() {
     const log = await window.api.googleAdsNegate({ customerId: gid, items });
     const fails = log.filter((l) => !l.ok).length;
     const okN = items.length; // estimado (negativados solicitados)
-    try { await window.api.logAction({ projectId: c.projectId, clientName: c.name, type: "negativacao", summary: `${okN} termo(s) negativado(s) no Google Ads`, detail: items.map((x) => x.text).join(", ") }); } catch {}
+    const escopo = state.termScope && state.termScope !== "todas as campanhas" ? ` (${state.termScope})` : "";
+    try { await window.api.logAction({ projectId: c.projectId, clientName: c.name, type: "negativacao", summary: `${okN} termo(s) negativado(s) no Google Ads${escopo}`, detail: items.map((x) => x.text).join(", ") }); } catch {}
     toast(fails ? `${fails} grupo(s) falharam.` : `${items.length} termo(s) negativado(s)! ✅`, !!fails);
     $("#termBody").insertAdjacentHTML("afterbegin", log.map((l) => `<div class="warnbar" style="${l.ok ? "background:rgba(25,227,162,.07);border-color:rgba(25,227,162,.3);color:#7be8c0" : ""}">${l.txt}</div>`).join(""));
   } catch (e) { toast(e.message, true); }
@@ -2257,7 +2331,7 @@ async function gerarRelatorio() {
     $("#copyRelBtn").classList.remove("hidden"); $("#pdfRelBtn").classList.remove("hidden"); $("#saveHistRelBtn").classList.remove("hidden");
     if ((resp.notes || []).length) console.warn("[relatório]", resp.notes.join(" | "));
     // preenche a análise de cada seção (Gemini/Claude) — em paralelo; otimizações têm review próprio
-    resp.sections.forEach((sec) => sec.platform === "otimizacoes" ? fillOptimReview(sec, cName, monthLabel) : fillReportAnalysis(sec, cName, monthLabel));
+    resp.sections.forEach((sec) => { if (sec.platform === "otimizacoes") { fillOptimReview(sec, cName, monthLabel); } else { fillReportAnalysis(sec, cName, monthLabel); fillCampaignAnalysis(sec, cName, monthLabel); } });
     return;
   } catch (e) {
     body.innerHTML = `<div class="state error"><div class="big">⚠️</div>${e.message}</div>`;
@@ -2274,7 +2348,7 @@ function reportPeriod(ms) {
 // os textos editáveis (contenteditable) pra poder revisar depois no histórico
 function reportHtmlForSave(pageEl) {
   const clone = pageEl.cloneNode(true);
-  clone.querySelectorAll(".rr-kpi-x,.rr-addmetric-wrap,.rr-metricmenu,.rr-remove,.rr-clock,.rr-drop-mark").forEach((el) => el.remove());
+  clone.querySelectorAll(".rr-kpi-x,.rr-addmetric-wrap,.rr-metricmenu,.rr-remove,.rr-clock,.rr-drop-mark,.rr-trello-x,.rr-obs").forEach((el) => el.remove());
   clone.querySelectorAll("[draggable]").forEach((el) => el.removeAttribute("draggable"));
   return `<div class="rr-page">${clone.innerHTML}</div>`;
 }
@@ -2304,7 +2378,7 @@ async function bulkGenerateReports(ids) {
       stage.innerHTML = "";
       ReportView.renderInto(stage, resp.sections, { editable: true });
       const cli = state.clients.find((c) => c.projectId === s.pid) || {};
-      await Promise.all(resp.sections.map((sec) => sec.platform === "otimizacoes" ? fillOptimReview(sec, s.name, per.monthLabel, { root: stage }) : fillReportAnalysis(sec, s.name, per.monthLabel, { root: stage, benchmarks: cli.benchmarks || {} })));
+      await Promise.all(resp.sections.map((sec) => sec.platform === "otimizacoes" ? fillOptimReview(sec, s.name, per.monthLabel, { root: stage }) : Promise.all([fillReportAnalysis(sec, s.name, per.monthLabel, { root: stage, benchmarks: cli.benchmarks || {} }), fillCampaignAnalysis(sec, s.name, per.monthLabel, { root: stage })])));
       const pageEl = stage.querySelector(".rr-page");
       await window.api.historySave({ projectId: s.pid, clientName: s.name, kind: "report", monthLabel: per.monthLabel, title: `Relatório ${per.monthLabel}`, html: reportHtmlForSave(pageEl) });
       s.st = "ok"; render();
@@ -2374,6 +2448,7 @@ async function fillReportAnalysis(sec, cName, monthLabel, opts) {
       kpis: (sec.kpis || []).map((k) => ({ label: k.label, value: k.value, prev: k.prev, kind: k.kind })),
       adsets: pick(raw.adsets), ads: pick(raw.ads), quali: sec.quali || null,
       benchmarks: repBenchList(sec.platform, opts.benchmarks),
+      obs: sec.obs || "",
     });
     const points = parseAnalysisPoints(txt);
     const B = { geral: [], publicos: [], anuncios: [], proximos: [] };
@@ -2395,6 +2470,26 @@ async function fillReportAnalysis(sec, cName, monthLabel, opts) {
   }
 }
 
+// preenche a análise CAMPANHA A CAMPANHA (bloco <plataforma>-campanhas), cada uma julgada pelo objetivo
+async function fillCampaignAnalysis(sec, cName, monthLabel, opts) {
+  opts = opts || {};
+  const root = opts.root || document.getElementById("repBody");
+  if (!root) return;
+  const el = root.querySelector(`[data-analysis="${sec.platform}-campanhas"]`);
+  if (!el) return;
+  const campaigns = (sec.raw && sec.raw.campaigns) || [];
+  if (!campaigns.length) { el.remove(); return; }
+  try {
+    const txt = await window.api.reportAnalyzeCampaigns({ clientName: cName, monthLabel, label: sec.label, campaigns, obs: sec.obs || "" });
+    const pts = parseAnalysisPoints(txt);
+    if (pts.length) { el.innerHTML = pointsToHtml(pts); el.contentEditable = "true"; } else el.remove();
+  } catch (e) {
+    el.innerHTML = `<span class="rr-ph">⚠️ ${e.message} — <a href="#" class="rep-retry-camp">tentar de novo</a></span>`;
+    const a = el.querySelector(".rep-retry-camp");
+    if (a) a.addEventListener("click", (ev) => { ev.preventDefault(); el.innerHTML = '<span class="rr-ph">⏳ analisando campanhas…</span>'; fillCampaignAnalysis(sec, cName, monthLabel, opts); });
+  }
+}
+
 // preenche o REVIEW da seção de otimizações (texto da IA sobre o que foi feito)
 async function fillOptimReview(sec, cName, monthLabel, opts) {
   opts = opts || {};
@@ -2403,7 +2498,7 @@ async function fillOptimReview(sec, cName, monthLabel, opts) {
   const el = root.querySelector('[data-analysis="otim-review"]');
   if (!el) return;
   try {
-    const txt = await window.api.reportReviewOptim({ clientName: cName, monthLabel, groups: (sec.otimGroups || []).map((g) => ({ label: g.label, items: (g.items || []).map((it) => ({ text: it.text, detail: it.detail })) })) });
+    const txt = await window.api.reportReviewOptim({ clientName: cName, monthLabel, trelloCards: (sec.trelloCards || []).map((c) => ({ name: c.name, date: c.date })), groups: (sec.otimGroups || []).map((g) => ({ label: g.label, items: (g.items || []).map((it) => ({ text: it.text, detail: it.detail })) })) });
     const pts = parseAnalysisPoints(txt);
     if (pts.length) el.innerHTML = pointsToHtml(pts);
     else { const p = document.createElement("p"); p.textContent = String(txt || "").replace(/^\s*##\s*.*\n?/gm, "").trim(); el.innerHTML = ""; el.appendChild(p); }
@@ -2458,6 +2553,47 @@ $("#pdfRelBtn").addEventListener("click", async () => {
     if (r && r.saved) toast("PDF salvo!");
   } catch (e) { toast("Erro ao gerar PDF: " + e.message, true); }
   finally { btn.textContent = old; btn.disabled = false; }
+});
+
+// links de card do Trello no relatório abrem no navegador do sistema (não numa janela do Electron)
+document.addEventListener("click", (e) => {
+  const a = e.target.closest && e.target.closest("a.rr-trello-link");
+  if (a && a.getAttribute("href")) { e.preventDefault(); window.api.openExternal(a.getAttribute("href")); return; }
+  // remover um card de "Concluído no Trello" do relatório (edição)
+  const x = e.target.closest && e.target.closest(".rr-trello-x");
+  if (x) { e.preventDefault(); const li = x.closest("li"); if (li) li.remove(); return; }
+  // aplicar observações: reescreve a análise da plataforma incorporando o que a analista escreveu
+  const ob = e.target.closest && e.target.closest(".rr-obs-apply");
+  if (ob) {
+    e.preventDefault();
+    const box = ob.closest(".rr-obs");
+    const d = state.repDoc || {};
+    const sec = (d.sections || []).find((s) => s.platform === (box && box.getAttribute("data-obs")));
+    const ta = box && box.querySelector(".rr-obs-txt"), msg = box && box.querySelector(".rr-obs-msg");
+    if (!sec || !ta) return;
+    const note = ta.value.trim();
+    if (!note) { if (msg) msg.textContent = "Escreva a observação primeiro."; return; }
+    sec.obs = note;
+    ob.disabled = true; if (msg) msg.textContent = "⏳ reescrevendo o texto com a sua observação…";
+    const root = box.closest(".rr-section") || document;
+    root.querySelectorAll("[data-analysis]").forEach((el) => { el.innerHTML = '<span class="rr-ph">⏳ regenerando…</span>'; });
+    Promise.all([
+      fillReportAnalysis(sec, d.cName, d.monthLabel, { benchmarks: d.benchmarks }),
+      fillCampaignAnalysis(sec, d.cName, d.monthLabel),
+    ]).then(() => { ob.disabled = false; if (msg) msg.textContent = "✅ aplicado no texto."; })
+      .catch((err) => { ob.disabled = false; if (msg) msg.textContent = "⚠️ " + err.message; });
+    return;
+  }
+  // inverter se SUBIR é bom/ruim numa métrica (ex.: custo por conversão subindo = ruim = vermelho)
+  const dt = e.target.closest && e.target.closest(".rr-delta-edit");
+  if (dt) {
+    e.preventDefault();
+    const inv = dt.getAttribute("data-invert") === "1" ? 0 : 1;
+    dt.setAttribute("data-invert", String(inv));
+    if (dt.classList.contains("up")) { dt.classList.replace("up", "down"); }
+    else if (dt.classList.contains("down")) { dt.classList.replace("down", "up"); }
+    dt.title = inv ? "Hoje: SUBIR é ruim. Clique pra inverter." : "Hoje: SUBIR é bom. Clique pra inverter.";
+  }
 });
 
 // ---- edição do relatório: remover plataforma, remover métrica, adicionar métrica ----
@@ -3093,7 +3229,10 @@ async function loadMetaCreatives(cb) {
               <div class="cm"><span class="cm-v">${ad.leads}</span><span class="cm-l">leads</span></div>
               <div class="cm"><span class="cm-v">${ad.cpl ? "R$ " + ad.cpl.toFixed(2) : "—"}</span><span class="cm-l">CPL</span></div>
             </div>
-            <button class="chip-btn ad-toggle ${ad.status === "ACTIVE" ? "" : "is-paused"}" data-id="${ad.id}" data-status="${ad.status}">${ad.status === "ACTIVE" ? "⏸ Pausar" : "▶ Ativar"}</button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="chip-btn ad-toggle ${ad.status === "ACTIVE" ? "" : "is-paused"}" data-id="${ad.id}" data-status="${ad.status}">${ad.status === "ACTIVE" ? "⏸ Pausar" : "▶ Ativar"}</button>
+              <button class="chip-btn ad-dup" data-id="${ad.id}" title="Duplicar este anúncio — a cópia entra pausada no mesmo conjunto">⧉ Duplicar</button>
+            </div>
           </div>
         </div>`).join("")}</div>`;
       // fallback em caso de imagem quebrada
@@ -3137,6 +3276,19 @@ async function loadMetaCreatives(cb) {
           const cli = clientByMeta(cb.dataset.acc);
           if (cli) try { await window.api.logAction({ projectId: cli.projectId, clientName: cli.name, type: "toggle", summary: `${next === "ACTIVE" ? "▶️ Ativou" : "⏸️ Pausou"} anúncio "${adName}" no Meta Ads` }); } catch {}
         } catch (e) { toast("Erro: " + e.message, true); tb.disabled = false; }
+      }));
+      // duplicar anúncio (cópia pausada no mesmo conjunto)
+      $$(".ad-dup", box).forEach((db) => db.addEventListener("click", async () => {
+        const adName = db.closest(".creative-card").querySelector(".creative-name").textContent.trim();
+        if (!window.confirm(`Duplicar o anúncio "${adName}"?\n\nA cópia entra PAUSADA no mesmo conjunto (com o mesmo criativo) — depois você edita e ativa no Meta.`)) return;
+        db.disabled = true; const old = db.textContent; db.textContent = "duplicando…";
+        try {
+          await window.api.metaDuplicateAd({ adId: db.dataset.id });
+          toast(`Anúncio "${adName}" duplicado (cópia pausada). ✅`);
+          const cli = clientByMeta(cb.dataset.acc);
+          if (cli) try { await window.api.logAction({ projectId: cli.projectId, clientName: cli.name, type: "creative", summary: `⧉ Duplicou o anúncio "${adName}" no Meta Ads (cópia pausada)` }); } catch {}
+          box.dataset.loaded = ""; loadMetaCreatives(cb); // recarrega pra mostrar a cópia
+        } catch (e) { toast("Erro ao duplicar: " + e.message, true); db.disabled = false; db.textContent = old; }
       }));
     }
     cb.textContent = "🖼️ Ocultar";

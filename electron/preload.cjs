@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("api", {
   // Relatório estilo Reportei (dado ao vivo + análise + export PDF)
   reportBuild: (args) => ipcRenderer.invoke("report:build", args),
   reportAnalyze: (args) => ipcRenderer.invoke("report:analyzeSection", args),
+  reportAnalyzeCampaigns: (args) => ipcRenderer.invoke("report:analyzeCampaigns", args),
   reportAnalyzeMetric: (args) => ipcRenderer.invoke("report:analyzeMetric", args),
   reportReviewOptim: (args) => ipcRenderer.invoke("report:reviewOptimizations", args),
   linkedinTest: () => ipcRenderer.invoke("linkedin:test"),
@@ -103,6 +104,7 @@ contextBridge.exposeInMainWorld("api", {
   metaToggleAdSet: (args) => ipcRenderer.invoke("meta:toggleAdSet", args),
   metaAds: (args) => ipcRenderer.invoke("meta:ads", args),
   metaToggleAd: (args) => ipcRenderer.invoke("meta:toggleAd", args),
+  metaDuplicateAd: (args) => ipcRenderer.invoke("meta:duplicateAd", args),
 
   // Google Ads — sessão por cliente
   gadsCampaigns: (args) => ipcRenderer.invoke("gads:campaigns", args),
