@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld("api", {
 
   // Relatório estilo Reportei (dado ao vivo + análise + export PDF)
   reportBuild: (args) => ipcRenderer.invoke("report:build", args),
+  geminiTest: (args) => ipcRenderer.invoke("gemini:test", args),
   reportAnalyze: (args) => ipcRenderer.invoke("report:analyzeSection", args),
   reportAnalyzeCampaigns: (args) => ipcRenderer.invoke("report:analyzeCampaigns", args),
   reportAnalyzeMetric: (args) => ipcRenderer.invoke("report:analyzeMetric", args),

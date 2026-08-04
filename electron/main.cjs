@@ -828,6 +828,16 @@ async function aiReport(s, prompt) {
   lastAIEngine = "Gemini";
   return t;
 }
+// testa a chave do Gemini: faz uma geração mínima e devolve ok + qual modelo respondeu (ou o erro claro)
+ipcMain.handle("gemini:test", async (_e, { key, model } = {}) => {
+  const s = readStore().settings;
+  const settings = { geminiKey: (key && key.trim()) || s.geminiKey, geminiModel: (model && model.trim()) || s.geminiModel };
+  if (!settings.geminiKey) return { ok: false, msg: "Cole a API Key do Gemini primeiro." };
+  try {
+    const t = await geminiAnalyze(settings, "Responda apenas com a palavra: OK");
+    return { ok: true, msg: `✅ Chave funcionando! O Gemini respondeu (${/ok/i.test(t) ? "teste OK" : "resposta recebida"}).` };
+  } catch (e) { return { ok: false, msg: e.message }; }
+});
 ipcMain.handle("report:analyzeSection", async (_e, d) => aiReport(readStore().settings, buildReportAnalysisPrompt(d)));
 
 // análise CAMPANHA A CAMPANHA — cada campanha julgada pelo SEU objetivo (inferido do nome)
@@ -2115,38 +2125,64 @@ ipcMain.handle("ai:engineInfo", () => {
   return { claude, gemini: !!s.geminiKey, engine: s.aiEngine || "gemini", prefer, last: lastAIEngine };
 });
 
+// traduz o erro cru do Google numa mensagem clara e acionável (ou null se for erro de modelo,
+// que vale a pena tentar outro modelo em vez de mostrar pro usuário).
+function geminiKeyError(e) {
+  const st = e && e.status;
+  const g = (e && e.body && e.body.error) || {};
+  const m = (g.message || (e && e.message) || "") + " " + (g.status || "");
+  if (st === 400 && /API key not valid|API_KEY_INVALID|api key expired/i.test(m))
+    return "❌ A chave do Gemini é INVÁLIDA ou expirou. Gere uma nova em https://aistudio.google.com/apikey e cole em ⚙️ Configurações → Gemini.";
+  if (st === 403 && /SERVICE_DISABLED|has not been used|is disabled|Generative Language API has not|not enabled/i.test(m))
+    return "❌ A chave existe, mas a API do Gemini NÃO está ativada no projeto dela. Abra https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com , clique em ATIVAR no projeto certo, espere 1–2 min e tente de novo. (Dica: gerar a chave nova pelo https://aistudio.google.com/apikey já vem com a API ativada.)";
+  if (st === 403 && /API_KEY_SERVICE_BLOCKED|blocked|referer|API restrictions|not authorized/i.test(m))
+    return "❌ A chave do Gemini tem RESTRIÇÕES que bloqueiam o app. Em Google Cloud → APIs e Serviços → Credenciais, abra a chave e deixe 'Restrições de API' como 'Não restringir' (ou libere a 'Generative Language API'). Salve e tente de novo.";
+  if (st === 429 || /RESOURCE_EXHAUSTED|quota/i.test(m))
+    return "❌ A COTA da chave do Gemini estourou (limite por minuto/dia). Espere alguns minutos e tente de novo, ou use outra chave. Chaves do plano grátis têm limite baixo.";
+  return null; // provavelmente erro de modelo/temporário → tenta outro modelo
+}
+
 async function geminiAnalyze(s, prompt, images, modelOverride) {
-  if (!s.geminiKey) throw new Error("Configure a chave do Gemini em Configurações.");
-  const model = modelOverride || s.geminiModel || "gemini-2.5-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(s.geminiKey)}`;
+  if (!s.geminiKey) throw new Error("Configure a chave do Gemini em ⚙️ Configurações.");
   const parts = [{ text: prompt }];
   // imagens (data URLs) — Gemini é multimodal, lê o print pra identificar o que ela apontou
   (images || []).forEach((img) => { if (img && /^data:/.test(img)) { const [meta, b64] = img.split(","); const mime = (meta.match(/data:([^;]+)/) || [])[1] || "image/png"; parts.push({ inline_data: { mime_type: mime, data: b64 } }); } });
-  const payload = JSON.stringify({
-    contents: [{ parts }],
-    // desliga o "thinking" do 2.5-flash (que consumia a saída) e dá espaço suficiente
-    generationConfig: { temperature: 0.7, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
-  });
-  let body;
-  for (let attempt = 1; ; attempt++) {
-    try {
-      body = await httpJson(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });
-      break;
-    } catch (e) {
-      // 503/429/500 = Gemini sobrecarregado → tenta de novo (backoff maior)
-      if ([429, 500, 503].includes(e.status) && attempt < 6) { console.log(`[gemini] ${e.status}, retry ${attempt}`); await sleep(attempt * 2500); continue; }
-      console.log("[gemini] erro:", e.message);
-      throw new Error(e.status === 503 ? "Gemini sobrecarregado no momento. Tente de novo em alguns segundos." : e.message);
+  // tenta o modelo configurado e, se ele não existir pra essa chave (404) ou vier vazio, cai pra alternativas.
+  const configured = modelOverride || s.geminiModel || "gemini-2.5-flash";
+  const fallbacks = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest", "gemini-1.5-flash"];
+  const models = [configured, ...fallbacks.filter((m) => m !== configured)];
+  let lastErr = null;
+  for (const model of models) {
+    const gen = { temperature: 0.7, maxOutputTokens: 8192 };
+    if (/2\.5/.test(model)) gen.thinkingConfig = { thinkingBudget: 0 }; // thinkingConfig só existe no 2.5
+    const payload = JSON.stringify({ contents: [{ parts }], generationConfig: gen });
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(s.geminiKey)}`;
+    let body = null;
+    for (let attempt = 1; ; attempt++) {
+      try { body = await httpJson(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload }); break; }
+      catch (e) {
+        lastErr = e;
+        // erro de CHAVE/COTA → não adianta trocar de modelo nem repetir: mostra a solução e para
+        const keyMsg = geminiKeyError(e);
+        if (keyMsg) throw new Error(keyMsg);
+        // sobrecarga temporária → repete no mesmo modelo
+        if ([429, 500, 503].includes(e.status) && attempt < 4) { console.log(`[gemini] ${model} ${e.status}, retry ${attempt}`); await sleep(attempt * 2000); continue; }
+        console.log(`[gemini] ${model} falhou:`, e.message); // ex.: 404 modelo inexistente → tenta o próximo
+        break;
+      }
     }
+    if (!body) continue; // esse modelo falhou → tenta o próximo da lista
+    const cand = body.candidates && body.candidates[0];
+    const text = ((cand && cand.content && cand.content.parts) || []).map((p) => p.text).filter(Boolean).join("\n").trim();
+    if (text) return text;
+    const reason = (cand && cand.finishReason) || (body.promptFeedback && body.promptFeedback.blockReason) || "resposta vazia";
+    console.log(`[gemini] ${model} vazio:`, reason);
+    if (/SAFETY|BLOCK|PROHIBITED/i.test(reason)) throw new Error(`O Gemini bloqueou a resposta por política de conteúdo (${reason}). Ajuste o texto e tente de novo.`);
+    lastErr = new Error(`Gemini não retornou texto (${reason}).`);
+    // vazio por MAX_TOKENS/thinking → tenta o próximo modelo (ex.: um sem "thinking")
   }
-  const cand = body && body.candidates && body.candidates[0];
-  const text = ((cand && cand.content && cand.content.parts) || []).map((p) => p.text).filter(Boolean).join("\n").trim();
-  if (!text) {
-    const reason = (cand && cand.finishReason) || (body && body.promptFeedback && body.promptFeedback.blockReason) || "resposta vazia";
-    console.log("[gemini] vazio. finishReason/erro:", reason, "·", JSON.stringify(body).slice(0, 400));
-    throw new Error(`Gemini não retornou texto (${reason}).`);
-  }
-  return text;
+  if (lastErr && lastErr.status === 503) throw new Error("Gemini sobrecarregado no momento. Tente de novo em alguns segundos.");
+  throw new Error((lastErr && lastErr.message) || "Não consegui gerar com o Gemini. Confira a chave em ⚙️ Configurações.");
 }
 
 /* ---------------------------------------------------------- */

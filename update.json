@@ -1,6 +1,6 @@
 {
-  "version": "1.3.31",
-  "notes": "LinkedIn conecta sem navegador (2-legged) + botão pelo navegador; Relatórios: análise por campanha ciente do objetivo, otimizações puxadas do Trello (Concluído, por data do card) com links editáveis, bloco de Observações que enriquece o texto e não sai no PDF, cor do delta por bom/ruim (custo subindo = vermelho, clicável pra inverter); Termos de busca por campanha e grupo de anúncio; Meta Ads: duplicar anúncio (cópia pausada).",
+  "version": "1.3.32",
+  "notes": "Gemini mais robusto: se o modelo configurado nao existir pra chave, tenta automaticamente outros (2.5-flash, 2.0-flash, 1.5-flash); mensagens claras quando a chave e invalida, a API nao esta ativada, tem restricao ou estourou a cota; e botao 'testar chave do Gemini' nas Configuracoes.",
   "files": [
     "src/app.js",
     "src/engine.js",

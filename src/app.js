@@ -260,6 +260,14 @@ if (liTestBtn) liTestBtn.addEventListener("click", async () => {
     m.style.color = r.ok ? "var(--accent)" : "#e0857a";
   } catch (e) { m.textContent = "❌ " + e.message; m.style.color = "#e0857a"; }
 });
+const geminiTestBtn = document.getElementById("geminiTestBtn");
+if (geminiTestBtn) geminiTestBtn.addEventListener("click", async () => {
+  const m = $("#geminiTestMsg"); m.textContent = "testando…"; m.style.color = "var(--muted)";
+  try {
+    const r = await window.api.geminiTest({ key: $("#cfgGemini").value.trim(), model: $("#cfgGeminiModel").value.trim() });
+    m.textContent = r.msg; m.style.color = r.ok ? "var(--accent)" : "#e0857a";
+  } catch (e) { m.textContent = "❌ " + e.message; m.style.color = "#e0857a"; }
+});
 $("#saveTemplateBtn").addEventListener("click", async () => {
   state.settings = await window.api.setSettings({ reportTemplate: $("#cfgReportTemplate").value });
   toast("Modelo de relatório salvo.");
