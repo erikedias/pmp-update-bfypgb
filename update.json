@@ -1,6 +1,6 @@
 {
-  "version": "1.3.34",
-  "notes": "Motor de IA nos relatórios: escolha Gemini (rápido) ou Claude Code (seu plano, sem cota) — ideal pra gerar todos os relatórios de uma vez sem estourar a cota do Gemini",
+  "version": "1.3.35",
+  "notes": "Relatórios do histórico: botão 'Remover ✕' por canal (Google/Meta/LinkedIn) — dá pra tirar um canal pausado/zerado de um relatório já gerado e salvar",
   "files": [
     "src/app.js",
     "src/engine.js",

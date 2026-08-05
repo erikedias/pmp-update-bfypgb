@@ -2822,6 +2822,15 @@ function enableReportEditingDom(root) {
   root.querySelectorAll(".rr-section").forEach((sec) => {
     const anaEl = sec.querySelector("[data-analysis]");
     const platform = anaEl ? (anaEl.getAttribute("data-analysis").split("-")[0] || "") : "";
+    // recria o botão "Remover ✕" da plataforma inteira (foi tirado ao salvar) — pra poder
+    // excluir um canal (Google/Meta/LinkedIn) que ficou zerado/pausado depois de gerado
+    if (!sec.querySelector(".rr-remove")) {
+      const btn = document.createElement("button");
+      btn.type = "button"; btn.className = "rr-remove";
+      btn.title = "Remover esta plataforma do relatório"; btn.textContent = "Remover ✕";
+      const head = sec.querySelector(".rr-head");
+      if (head) head.appendChild(btn); else sec.insertBefore(btn, sec.firstChild);
+    }
     sec.querySelectorAll(".rr-kpi").forEach((card) => {
       card.setAttribute("draggable", "true");
       card.setAttribute("title", "Arraste para mudar a posição");
@@ -3013,7 +3022,7 @@ async function openHistory(id) {
       <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
         <button class="chip-btn" id="histRepSave">💾 Salvar alterações</button>
         <button class="chip-btn" id="histRepPdf">📄 Exportar PDF</button>
-        <span style="font-size:12px;color:var(--muted)">✏️ Clique nos textos da análise para editar antes de exportar.</span>
+        <span style="font-size:12px;color:var(--muted)">✏️ Edite os textos clicando neles · use “Remover ✕” no topo de um canal para tirá-lo do relatório · depois clique em 💾 Salvar.</span>
       </div>
       <div class="rr-doc" id="histRepDoc" style="border:1px solid var(--line);border-radius:12px;overflow:hidden">${h.html || "<i>sem conteúdo</i>"}</div>`;
     // habilita a edição completa (textos + remover/adicionar/arrastar métricas), igual no relatório novo
