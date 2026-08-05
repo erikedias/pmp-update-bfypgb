@@ -325,3 +325,34 @@ tr.term-bad{background:rgba(255,107,107,.06)}
 .bulk-cli input{cursor:pointer}
 .bulk-row{padding:8px 4px;border-bottom:1px solid var(--line);font-size:14px}
 .bulk-row:last-child{border-bottom:0}
+
+/* ===== Aba Verba (pacing) ===== */
+.verba-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;margin-top:10px}
+.verba-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.verba-card-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
+.verba-card-head b{font-size:15px}
+.verba-pace-note{font-size:11px;color:var(--muted);white-space:nowrap}
+.verba-loading{color:var(--muted);font-size:13px;padding:6px 0}
+.verba-err{color:#ff9b9b;font-size:12.5px;padding:4px 0}
+.verba-plat{padding:9px 0;border-top:1px solid var(--line)}
+.verba-plat:first-child{border-top:0}
+.verba-plat-top{display:flex;justify-content:space-between;align-items:center;font-size:13.5px}
+.verba-plat-name{font-weight:600}
+.verba-plat-status{font-size:11.5px;color:var(--muted)}
+.verba-over .verba-plat-status{color:#ff9b9b}
+.verba-under .verba-plat-status{color:#ffce7a}
+.verba-ok .verba-plat-status{color:var(--accent)}
+.verba-bar{position:relative;height:8px;background:var(--panel-2);border-radius:6px;margin:6px 0 5px;overflow:visible}
+.verba-bar-fill{position:absolute;left:0;top:0;height:100%;border-radius:6px;background:var(--accent)}
+.verba-over .verba-bar-fill{background:#ff7a7a}
+.verba-under .verba-bar-fill{background:#ffce7a}
+.verba-bar-ideal{position:absolute;top:-2px;width:2px;height:12px;background:var(--txt);opacity:.55}
+.verba-plat-nums{font-size:11.5px;color:var(--muted)}
+.verba-plat-nums b{color:var(--txt);font-weight:600}
+.verba-weeks-btn{margin-top:10px;font-size:12px;padding:5px 10px}
+.verba-weeks{margin-top:8px;border-top:1px dashed var(--line);padding-top:8px}
+.verba-week-row{padding:5px 0;font-size:12px}
+.verba-week-lbl{color:var(--muted);font-size:11px;margin-bottom:2px}
+.verba-week-plats{display:flex;flex-wrap:wrap;gap:10px}
+.verba-week-plat{white-space:nowrap}
+.verba-muted{color:var(--muted)}

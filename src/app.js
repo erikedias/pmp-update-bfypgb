@@ -99,12 +99,13 @@ function toast(msg, isErr) {
 }
 
 /* ---------------- navegação ---------------- */
-const ALL_VIEWS = ["semana", "painel", "urgencia", "funil", "subida", "termos", "kw", "meta", "gads", "gtm", "perfil", "relatorios", "historico", "config"];
+const ALL_VIEWS = ["semana", "painel", "verba", "urgencia", "funil", "subida", "termos", "kw", "meta", "gads", "gtm", "perfil", "relatorios", "historico", "config"];
 $$(".nav .tab").forEach((b) => b.addEventListener("click", () => {
   $$(".nav .tab").forEach((x) => x.classList.remove("active"));
   b.classList.add("active");
   ALL_VIEWS.forEach((v) => $("#view-" + v).classList.toggle("hidden", v !== b.dataset.view));
   if (b.dataset.view === "semana") renderSemana();
+  if (b.dataset.view === "verba") initVerba();
   if (b.dataset.view === "termos" && $("#termCampSel") && !$("#termCampSel").value && $("#termCampSel").options.length <= 1) loadTermCampaigns();
   if (b.dataset.view === "kw") loadKw();
   if (b.dataset.view === "historico") renderHistory();
@@ -182,6 +183,7 @@ $("#updateCheckBtn").addEventListener("click", async () => {
 
 /* ---------------- seletor de mês (relatórios) ---------------- */
 function monthLabelOf(y, m) { return new Date(y, m - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" }); }
+function fmtBR(isoStr) { if (!isoStr) return ""; const [y, m, d] = String(isoStr).slice(0, 10).split("-"); return `${d}/${m}/${y}`; }
 function renderRepMonth() { $("#repMonthLabel").value = monthLabelOf(state.repMonth.y, state.repMonth.m); }
 function shiftMonth(delta) {
   const d = new Date(state.repMonth.y, state.repMonth.m - 1 + delta, 1);
@@ -2312,30 +2314,62 @@ async function scanUrgencias() {
 /* ============================================================
    RELATÓRIOS (mensal, segue o modelo do Obsidian)
    ============================================================ */
+// alterna os campos de mês / período conforme o tipo de relatório escolhido
+function repTypeUI() {
+  const t = ($("#repTypeSel") && $("#repTypeSel").value) || "mensal";
+  const canc = t === "cancelamento";
+  $("#repMonthField").classList.toggle("hidden", canc);
+  $("#repRangeField").classList.toggle("hidden", !canc);
+  // ao entrar em cancelamento, pré-preenche o período com o mês corrente do seletor (só se vazio)
+  if (canc && !$("#repStartDate").value) {
+    const { y, m } = state.repMonth;
+    $("#repStartDate").value = `${y}-${pad(m)}-01`;
+    $("#repEndDate").value = iso(new Date(y, m, 0));
+  }
+  $("#bulkRelBtn").classList.toggle("hidden", canc); // "gerar vários" só faz sentido no mensal
+}
+if ($("#repTypeSel")) $("#repTypeSel").addEventListener("change", repTypeUI);
+
 $("#gerarRelBtn").addEventListener("click", gerarRelatorio);
 async function gerarRelatorio() {
   const projectId = Number($("#repClientSel").value);
   if (!projectId) { toast("Selecione um cliente.", true); return; }
-  const { y, m } = state.repMonth;
-  const start = `${y}-${pad(m)}-01`;
-  const end = iso(new Date(y, m, 0)); // último dia do mês
-  const pPrev = new Date(y, m - 2, 1); // mês anterior
-  const py = pPrev.getFullYear(), pm = pPrev.getMonth() + 1;
-  const prevStart = `${py}-${pad(pm)}-01`, prevEnd = iso(new Date(py, pm, 0));
-  const monthLabel = monthLabelOf(y, m);
+  const mode = ($("#repTypeSel") && $("#repTypeSel").value) || "mensal";
+  let start, end, prevStart, prevEnd, monthLabel;
+  if (mode === "cancelamento") {
+    start = $("#repStartDate").value; end = $("#repEndDate").value;
+    if (!start || !end) { toast("Defina o período (início e fim).", true); return; }
+    if (start > end) { toast("A data de início não pode ser depois do fim.", true); return; }
+    // período anterior de MESMA duração, imediatamente antes (pra comparar a evolução)
+    const d0 = new Date(start + "T00:00:00"), d1 = new Date(end + "T00:00:00");
+    const days = Math.round((d1 - d0) / 86400000) + 1;
+    const pe = new Date(d0); pe.setDate(pe.getDate() - 1);
+    const ps = new Date(pe); ps.setDate(ps.getDate() - days + 1);
+    prevStart = iso(ps); prevEnd = iso(pe);
+    monthLabel = `${fmtBR(start)} a ${fmtBR(end)}`;
+  } else {
+    const { y, m } = state.repMonth;
+    start = `${y}-${pad(m)}-01`;
+    end = iso(new Date(y, m, 0)); // último dia do mês
+    const pPrev = new Date(y, m - 2, 1); // mês anterior
+    const py = pPrev.getFullYear(), pm = pPrev.getMonth() + 1;
+    prevStart = `${py}-${pad(pm)}-01`; prevEnd = iso(new Date(py, pm, 0));
+    monthLabel = monthLabelOf(y, m);
+  }
   const repCli = state.clients.find((c) => c.projectId === projectId) || {};
   const cName = repCli.name || "";
   const body = $("#repBody");
-  body.innerHTML = '<div class="state"><div class="big">⏳</div>Puxando dado ao vivo (Meta/Google pela sua API) + LinkedIn pelo Reportei, com o mês anterior pra comparar…</div>';
+  body.innerHTML = `<div class="state"><div class="big">⏳</div>${mode === "cancelamento" ? "Puxando o panorama geral do período (dado ao vivo Meta/Google + LinkedIn pelo Reportei)…" : "Puxando dado ao vivo (Meta/Google pela sua API) + LinkedIn pelo Reportei, com o mês anterior pra comparar…"}</div>`;
   $("#copyRelBtn").classList.add("hidden"); $("#pdfRelBtn").classList.add("hidden");
   try {
-    const resp = await window.api.reportBuild({ projectId, start, end, prevStart, prevEnd });
+    const resp = await window.api.reportBuild({ projectId, start, end, prevStart, prevEnd, mode });
     if (!resp.sections || !resp.sections.length) {
       body.innerHTML = `<div class="state">Sem dados de mídia paga em ${monthLabel} para este cliente.${(resp.notes || []).length ? "<br><br>" + resp.notes.join("<br>") : "<br><br>Vincule a conta Meta/Google (Configurações) ou o projeto no Reportei."}</div>`;
       return;
     }
+    resp.sections.forEach((sec) => { sec.mode = mode; });
     ReportView.renderInto(body, resp.sections, { editable: true });
-    state.repDoc = { cName, monthLabel, projectId, benchmarks: repCli.benchmarks || {}, sections: resp.sections };
+    state.repDoc = { cName, monthLabel, projectId, mode, benchmarks: repCli.benchmarks || {}, sections: resp.sections };
     $("#copyRelBtn").classList.remove("hidden"); $("#pdfRelBtn").classList.remove("hidden"); $("#saveHistRelBtn").classList.remove("hidden");
     if ((resp.notes || []).length) console.warn("[relatório]", resp.notes.join(" | "));
     // preenche a análise de cada seção (Gemini/Claude) — em paralelo; otimizações têm review próprio
@@ -2456,11 +2490,11 @@ async function fillReportAnalysis(sec, cName, monthLabel, opts) {
       kpis: (sec.kpis || []).map((k) => ({ label: k.label, value: k.value, prev: k.prev, kind: k.kind })),
       adsets: pick(raw.adsets), ads: pick(raw.ads), quali: sec.quali || null,
       benchmarks: repBenchList(sec.platform, opts.benchmarks),
-      obs: sec.obs || "",
+      obs: sec.obs || "", mode: sec.mode || "mensal",
     });
     const points = parseAnalysisPoints(txt);
     const B = { geral: [], publicos: [], anuncios: [], proximos: [] };
-    points.forEach((pt) => { const t = pt.title.toLowerCase(); if (/pr[óo]xim/.test(t)) B.proximos.push(pt); else if (/p[úu]blico/.test(t)) B.publicos.push(pt); else if (/an[úu]ncio/.test(t)) B.anuncios.push(pt); else B.geral.push(pt); });
+    points.forEach((pt) => { const t = pt.title.toLowerCase(); if (/pr[óo]xim|sugest/.test(t)) B.proximos.push(pt); else if (/p[úu]blico/.test(t)) B.publicos.push(pt); else if (/an[úu]ncio/.test(t)) B.anuncios.push(pt); else B.geral.push(pt); });
     // se não veio nenhum título de nível, joga tudo no geral
     const geralArr = (B.geral.length || B.publicos.length || B.anuncios.length || B.proximos.length) ? B.geral : points;
     const put = (el, arr) => { if (!el) return; if (arr.length) { el.innerHTML = pointsToHtml(arr); el.contentEditable = "true"; } else el.remove(); };
@@ -4028,6 +4062,139 @@ function paintPacing(c, frac) {
     parts.push(`${icon} ${label} ${pct}% <span style="color:var(--muted)">(R$ ${brl(s)}/${brl(b)})</span>`);
   });
   els.forEach((el) => { el.innerHTML = parts.length ? "💰 " + parts.join(" · ") : ""; });
+}
+
+/* ============ ABA VERBA (pacing dedicado por cliente) ============ */
+let verbaWired = false;
+const verbaPlatMeta = [["meta", "Meta"], ["google", "Google"], ["linkedin", "LinkedIn"]];
+const vEsc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+const brl0 = (n) => "R$ " + Math.round(n || 0).toLocaleString("pt-BR");
+
+function initVerba() {
+  if (!state.verbaMonth) { const n = new Date(); state.verbaMonth = { y: n.getFullYear(), m: n.getMonth() + 1 }; }
+  $("#verbaMonthLabel").value = monthLabelOf(state.verbaMonth.y, state.verbaMonth.m);
+  if (!verbaWired) {
+    verbaWired = true;
+    $("#verbaPrev").addEventListener("click", () => shiftVerbaMonth(-1));
+    $("#verbaNext").addEventListener("click", () => shiftVerbaMonth(1));
+    $("#verbaRefreshBtn").addEventListener("click", () => renderVerba());
+    $("#verbaBody").addEventListener("click", onVerbaClick);
+  }
+  renderVerba();
+}
+function shiftVerbaMonth(delta) {
+  const d = new Date(state.verbaMonth.y, state.verbaMonth.m - 1 + delta, 1);
+  state.verbaMonth = { y: d.getFullYear(), m: d.getMonth() + 1 };
+  $("#verbaMonthLabel").value = monthLabelOf(state.verbaMonth.y, state.verbaMonth.m);
+  renderVerba();
+}
+function verbaMonthMeta() {
+  const { y, m } = state.verbaMonth;
+  const dim = new Date(y, m, 0).getDate();
+  const now = new Date();
+  const isCurrent = (y === now.getFullYear() && m === now.getMonth() + 1);
+  const isFuture = new Date(y, m - 1, 1) > new Date(now.getFullYear(), now.getMonth(), 1);
+  const elapsed = isFuture ? 0 : (isCurrent ? now.getDate() : dim);
+  return { y, m, dim, monthStart: `${y}-${pad(m)}-01`, endDate: isCurrent ? iso(now) : iso(new Date(y, m, 0)), isCurrent, isFuture, elapsed };
+}
+function verbaSpendFromResp(resp) {
+  const out = {};
+  ((resp && resp.platforms) || []).forEach((p) => { out[p.platform] = (p.totals.spend || 0) + (p.totals.cost || 0); });
+  return out;
+}
+function verbaStatus(ratio) {
+  return ratio > 1.12 ? { ic: "🔴", txt: "acima do ideal", cls: "over" }
+    : ratio < 0.85 ? { ic: "🟠", txt: "abaixo do ideal", cls: "under" }
+      : { ic: "🟢", txt: "no ritmo", cls: "ok" };
+}
+function verbaWeekRanges(mm) {
+  const ranges = [];
+  for (let sd = 1; sd <= mm.dim; sd += 7) {
+    if (sd > mm.elapsed) break;
+    const ed = Math.min(sd + 6, mm.dim);
+    const endDay = Math.min(ed, mm.elapsed);
+    ranges.push({ sd, fullEnd: ed, days: ed - sd + 1, elapsedDays: endDay - sd + 1, start: `${mm.y}-${pad(mm.m)}-${pad(sd)}`, end: `${mm.y}-${pad(mm.m)}-${pad(endDay)}` });
+  }
+  return ranges;
+}
+async function renderVerba() {
+  const body = $("#verbaBody");
+  const mm = verbaMonthMeta();
+  const clientes = state.clients.filter((c) => c.budget && (c.budget.meta || c.budget.google || c.budget.linkedin));
+  if (mm.isFuture) { body.innerHTML = `<div class="state"><div class="big">📅</div>${monthLabelOf(mm.y, mm.m)} ainda não começou.</div>`; return; }
+  if (!clientes.length) { body.innerHTML = `<div class="state"><div class="big">💰</div>Nenhum cliente com orçamento definido.<br><span style="font-size:12px">Defina o orçamento mensal (Meta/Google/LinkedIn) no perfil de cada cliente.</span></div>`; return; }
+  body.innerHTML = `<div class="verba-grid">${clientes.map((c) => `
+    <div class="verba-card" data-pid="${c.projectId}">
+      <div class="verba-card-head"><b>${vEsc(c.name)}</b><span class="verba-pace-note">${mm.elapsed}/${mm.dim} dias do mês</span></div>
+      <div class="verba-plats"><div class="verba-loading">⏳ calculando…</div></div>
+    </div>`).join("")}</div>`;
+  for (const c of clientes) {
+    const slot = body.querySelector(`.verba-card[data-pid="${c.projectId}"] .verba-plats`);
+    if (!slot) continue;
+    try {
+      const ads = c.adAccounts || {};
+      const resp = await window.api.reporteiWeekData({ projectId: reporteiIdOf(c), start: mm.monthStart, end: mm.endDate, includeAds: false, directMeta: ads.meta || null, directGoogle: ads.google || null });
+      slot.innerHTML = verbaPlatsHTML(c, verbaSpendFromResp(resp), mm);
+    } catch (e) {
+      slot.innerHTML = `<div class="verba-err">⚠️ não deu pra puxar o gasto (${vEsc(e.message)})</div>`;
+    }
+  }
+}
+function verbaPlatsHTML(c, spent, mm) {
+  const frac = mm.dim ? mm.elapsed / mm.dim : 0;
+  const idealPct = Math.round(frac * 100);
+  const rows = verbaPlatMeta.map(([k, label]) => {
+    const bud = c.budget[k]; if (!bud) return "";
+    const sp = spent[k] || 0;
+    const ideal = bud * frac;
+    const st = verbaStatus(ideal > 0 ? sp / ideal : 0);
+    const pctBud = Math.round(sp / bud * 100);
+    const proj = mm.isCurrent && mm.elapsed > 0 ? sp / mm.elapsed * mm.dim : sp;
+    const projPct = Math.round(proj / bud * 100);
+    return `<div class="verba-plat verba-${st.cls}">
+      <div class="verba-plat-top"><span class="verba-plat-name">${st.ic} ${label}</span><span class="verba-plat-status">${st.txt}</span></div>
+      <div class="verba-bar"><div class="verba-bar-fill" style="width:${Math.min(100, pctBud)}%"></div><div class="verba-bar-ideal" style="left:${Math.min(100, idealPct)}%" title="ideal até hoje"></div></div>
+      <div class="verba-plat-nums">${brl0(sp)} de ${brl0(bud)} <b>(${pctBud}%)</b> · ideal até hoje ${brl0(ideal)}${mm.isCurrent ? ` · projeção fim do mês <b>${brl0(proj)} (${projPct}%)</b>` : ""}</div>
+    </div>`;
+  }).filter(Boolean).join("");
+  return rows + `<button class="btn btn-ghost verba-weeks-btn" data-pid="${c.projectId}">📅 Ver por semana</button><div class="verba-weeks" data-pid="${c.projectId}" style="display:none"></div>`;
+}
+function onVerbaClick(e) {
+  const b = e.target.closest(".verba-weeks-btn"); if (!b) return;
+  const pid = Number(b.dataset.pid);
+  const c = state.clients.find((x) => x.projectId === pid); if (!c) return;
+  const cont = $(`.verba-weeks[data-pid="${pid}"]`, $("#verbaBody")); if (!cont) return;
+  if (cont.dataset.loaded === "1") {
+    const open = cont.style.display !== "none";
+    cont.style.display = open ? "none" : "block";
+    b.textContent = open ? "📅 Ver por semana" : "📅 Ocultar semanas";
+    return;
+  }
+  cont.dataset.loaded = "1"; cont.style.display = "block"; b.textContent = "📅 Ocultar semanas";
+  loadVerbaWeeks(c, cont, verbaMonthMeta());
+}
+async function loadVerbaWeeks(c, container, mm) {
+  container.innerHTML = '<div class="verba-loading">⏳ puxando semanas…</div>';
+  const ranges = verbaWeekRanges(mm);
+  const ads = c.adAccounts || {};
+  const out = [];
+  for (const r of ranges) {
+    let spent = {};
+    try {
+      const resp = await window.api.reporteiWeekData({ projectId: reporteiIdOf(c), start: r.start, end: r.end, includeAds: false, directMeta: ads.meta || null, directGoogle: ads.google || null });
+      spent = verbaSpendFromResp(resp);
+    } catch { spent = {}; }
+    const parts = verbaPlatMeta.map(([k, label]) => {
+      const bud = c.budget[k]; if (!bud) return "";
+      const sp = spent[k] || 0;
+      const idealSoFar = bud * (mm.dim ? r.elapsedDays / mm.dim : 0);
+      const st = verbaStatus(idealSoFar > 0 ? sp / idealSoFar : 0);
+      return `<span class="verba-week-plat">${st.ic} ${label} ${brl0(sp)}<span class="verba-muted"> / ideal ${brl0(idealSoFar)}</span></span>`;
+    }).filter(Boolean).join("");
+    const partial = r.elapsedDays < r.days ? " · em andamento" : "";
+    out.push(`<div class="verba-week-row"><div class="verba-week-lbl">Dias ${r.sd}–${r.fullEnd}${partial}</div><div class="verba-week-plats">${parts}</div></div>`);
+  }
+  container.innerHTML = out.join("") || '<div class="verba-muted">Sem semanas para mostrar ainda.</div>';
 }
 
 // re-renderiza a aba se o dia virou e a aba está visível (app aberto de um dia pro outro)

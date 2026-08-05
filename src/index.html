@@ -17,6 +17,7 @@
     </div>
     <button class="tab active" data-view="semana">🗓️ Minha semana</button>
     <button class="tab" data-view="painel">📊 Painel da semana</button>
+    <button class="tab" data-view="verba">💰 Verba</button>
     <button class="tab" data-view="urgencia">🚨 Urgência</button>
     <button class="tab" data-view="funil">🧠 Funil Studio</button>
     <button class="tab" data-view="subida">🚀 Subida</button>
@@ -280,19 +281,56 @@
     </section>
 
 
+    <!-- ============ VERBA / PACING ============ -->
+    <section id="view-verba" class="wrap hidden">
+      <div class="topbar">
+        <div class="field">
+          <label>Mês</label>
+          <div class="weeknav">
+            <button id="verbaPrev" title="Mês anterior">‹</button>
+            <input type="text" id="verbaMonthLabel" readonly style="min-width:150px;text-align:center;cursor:default;text-transform:capitalize">
+            <button id="verbaNext" title="Próximo mês">›</button>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="verbaRefreshBtn">🔄 Atualizar</button>
+        <div class="spacer"></div>
+        <span id="verbaLegend" style="font-size:12px;color:var(--muted)">🟢 no ritmo · 🟠 gastando devagar · 🔴 acima do ideal</span>
+      </div>
+      <div id="verbaBody">
+        <div class="state"><div class="big">💰</div>Clique em <b>Atualizar</b> para calcular o pacing de verba de cada cliente.<br>
+          <span style="font-size:12px">Só aparecem clientes com orçamento definido no perfil.</span></div>
+      </div>
+    </section>
+
+
     <!-- ============ RELATÓRIOS ============ -->
     <section id="view-relatorios" class="wrap hidden">
       <div class="topbar">
         <div class="field">
+          <label>Tipo</label>
+          <select id="repTypeSel">
+            <option value="mensal">Relatório mensal</option>
+            <option value="cancelamento">Relatório de cancelamento</option>
+          </select>
+        </div>
+        <div class="field">
           <label>Cliente</label>
           <select id="repClientSel"></select>
         </div>
-        <div class="field">
+        <div class="field" id="repMonthField">
           <label>Mês</label>
           <div class="weeknav">
             <button id="monthPrev" title="Mês anterior">‹</button>
             <input type="text" id="repMonthLabel" readonly style="min-width:150px;text-align:center;cursor:default;text-transform:capitalize">
             <button id="monthNext" title="Próximo mês">›</button>
+          </div>
+        </div>
+        <div class="field hidden" id="repRangeField">
+          <label>Período (início → fim)</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="date" id="repStartDate">
+            <span style="color:var(--muted)">→</span>
+            <input type="date" id="repEndDate">
           </div>
         </div>
         <button class="btn btn-primary" id="gerarRelBtn">Gerar relatório</button>
