@@ -826,12 +826,27 @@ function buildReportAnalysisPrompt(d) {
     adLines ? `\nANÚNCIOS:\n${adLines}` : "",
   ].filter(Boolean).join("\n");
 }
-// RELATÓRIO: sempre pelo Gemini (formato consistente; o Claude Code injeta preâmbulo do CLAUDE.md)
-async function aiReport(s, prompt) {
-  if (!s.geminiKey) throw new Error("Os relatórios são gerados pelo Gemini — configure a chave do Gemini em ⚙️ Configurações.");
-  const t = await geminiAnalyze(s, prompt);
-  lastAIEngine = "Gemini";
-  return t;
+// RELATÓRIO: motor escolhido na aba (engine "gemini" ou "claude"); Claude Code usa o SEU plano
+// (sem cota que estoura como a do Gemini) — ideal pra geração em massa. Fallback automático entre os dois.
+async function aiReport(s, prompt, engine) {
+  const want = engine || s.reportEngine || "gemini";
+  const useGemini = async () => { const t = await geminiAnalyze(s, prompt); lastAIEngine = "Gemini"; return t; };
+  const useClaude = async () => { const t = await runClaudeCli(prompt, s.claudeModel || "sonnet"); lastAIEngine = "Claude Code (seu plano)"; return t; };
+  if (want === "claude") {
+    if (!claudeAvailable()) {
+      if (s.geminiKey) return useGemini();
+      throw new Error("Claude Code não está disponível nesta máquina (não logado). Faça login no Claude Code ou escolha o Gemini.");
+    }
+    try { return await useClaude(); }
+    catch (e) { if (s.geminiKey) { console.log("[claude-cli] falhou no relatório, fallback Gemini:", e.message); return useGemini(); } throw e; }
+  }
+  // gemini (padrão)
+  if (!s.geminiKey) {
+    if (claudeAvailable()) return useClaude();
+    throw new Error("Os relatórios precisam de um motor de IA — configure a chave do Gemini em ⚙️ Configurações ou faça login no Claude Code.");
+  }
+  try { return await useGemini(); }
+  catch (e) { if (claudeAvailable()) { console.log("[gemini] falhou no relatório, fallback Claude:", e.message); return useClaude(); } throw e; }
 }
 // testa a chave do Gemini: faz uma geração mínima e devolve ok + qual modelo respondeu (ou o erro claro)
 ipcMain.handle("gemini:test", async (_e, { key, model } = {}) => {
@@ -843,7 +858,7 @@ ipcMain.handle("gemini:test", async (_e, { key, model } = {}) => {
     return { ok: true, msg: `✅ Chave funcionando! O Gemini respondeu (${/ok/i.test(t) ? "teste OK" : "resposta recebida"}).` };
   } catch (e) { return { ok: false, msg: e.message }; }
 });
-ipcMain.handle("report:analyzeSection", async (_e, d) => aiReport(readStore().settings, buildReportAnalysisPrompt(d)));
+ipcMain.handle("report:analyzeSection", async (_e, d) => aiReport(readStore().settings, buildReportAnalysisPrompt(d), d.engine));
 
 // análise CAMPANHA A CAMPANHA — cada campanha julgada pelo SEU objetivo (inferido do nome)
 function buildCampaignAnalysisPrompt(d) {
@@ -881,7 +896,7 @@ function buildCampaignAnalysisPrompt(d) {
     `\nCAMPANHAS:\n${lines || "(sem campanhas no período)"}`,
   ].join("\n");
 }
-ipcMain.handle("report:analyzeCampaigns", async (_e, d) => aiReport(readStore().settings, buildCampaignAnalysisPrompt(d)));
+ipcMain.handle("report:analyzeCampaigns", async (_e, d) => aiReport(readStore().settings, buildCampaignAnalysisPrompt(d), d.engine));
 
 // análise de UMA métrica só (quando a analista adiciona uma métrica ao relatório)
 ipcMain.handle("report:analyzeMetric", async (_e, d) => {
@@ -894,7 +909,7 @@ ipcMain.handle("report:analyzeMetric", async (_e, d) => {
     d.bench != null ? `Benchmark de mercado para esta métrica: ≥ ${d.bench}%. Diga explicitamente se está acima ou abaixo dele.` : "",
     `REGRAS: já é a análise pronta — NÃO diga "vou analisar", sem meta-texto, sem traços/asteriscos/markdown além do "## ", em português, tom profissional. Se o valor for zero/ausente, comente com naturalidade sem inventar número.`,
   ].filter(Boolean).join("\n");
-  return aiReport(readStore().settings, prompt);
+  return aiReport(readStore().settings, prompt, d.engine);
 });
 
 // prompt livre (usado pelo Funil Studio embutido pra montar estratégias por descrição)
@@ -2791,7 +2806,7 @@ ipcMain.handle("report:reviewOptimizations", async (_e, d) => {
     `REGRAS: use SOMENTE o que está listado abaixo, não invente nenhuma ação. Já é o texto final — comece direto na descrição. Português claro.`,
     `\n${source}`,
   ].join("\n");
-  return aiReport(readStore().settings, prompt);
+  return aiReport(readStore().settings, prompt, d.engine);
 });
 
 // testa a conexão do LinkedIn Ads: valida o token e mostra se a conta libera a API de Anúncios

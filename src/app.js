@@ -132,6 +132,7 @@ document.addEventListener("click", (e) => {
   const lm = new Date(); lm.setDate(1); lm.setMonth(lm.getMonth() - 1);
   state.repMonth = { y: lm.getFullYear(), m: lm.getMonth() + 1 };
   renderRepMonth();
+  if ($("#repEngineSel") && state.settings.reportEngine) $("#repEngineSel").value = state.settings.reportEngine;
   updateNavHint();
   renderSemana(); // aba inicial
   // atualização automática ao abrir: se houver versão nova no GitHub, baixa e reinicia sozinho
@@ -2330,6 +2331,14 @@ function repTypeUI() {
 }
 if ($("#repTypeSel")) $("#repTypeSel").addEventListener("change", repTypeUI);
 
+// motor de IA escolhido pra gerar os relatórios (Gemini rápido x Claude Code sem cota)
+function repEngine() { return ($("#repEngineSel") && $("#repEngineSel").value) || "gemini"; }
+if ($("#repEngineSel")) $("#repEngineSel").addEventListener("change", async () => {
+  // guarda a preferência (vira o padrão e o que o backend usa em fallback)
+  try { state.settings.reportEngine = repEngine(); await window.api.setSettings(state.settings); } catch {}
+  toast(repEngine() === "claude" ? "Relatórios vão usar o Claude Code (seu plano) — aguenta gerar todos de uma vez." : "Relatórios vão usar o Gemini (rápido).");
+});
+
 $("#gerarRelBtn").addEventListener("click", gerarRelatorio);
 async function gerarRelatorio() {
   const projectId = Number($("#repClientSel").value);
@@ -2400,11 +2409,13 @@ async function bulkGenerateReports(ids) {
   const body = $("#repBody");
   ["copyRelBtn", "pdfRelBtn", "saveHistRelBtn"].forEach((b) => $("#" + b).classList.add("hidden"));
   const per = reportPeriod(state.repMonth);
+  const engine = repEngine(); // trava o motor escolhido pra toda a leva
+  const engineLbl = engine === "claude" ? "Claude Code (seu plano)" : "Gemini";
   const nameOf = (pid) => (state.clients.find((c) => c.projectId === pid) || {}).name || ("Cliente " + pid);
   const status = ids.map((pid) => ({ pid, name: nameOf(pid), st: "wait", msg: "" }));
   const ico = { wait: "•", run: "⏳", ok: "✅", empty: "—", err: "⚠️" };
   const render = () => {
-    body.innerHTML = `<div class="bulk-panel"><div class="section-title">📚 Gerando relatórios — ${per.monthLabel}</div>
+    body.innerHTML = `<div class="bulk-panel"><div class="section-title">📚 Gerando relatórios — ${per.monthLabel} <span style="font-size:12px;color:var(--muted);font-weight:400">· via ${engineLbl}</span></div>
       <div class="bulk-list">${status.map((s) => `<div class="bulk-row">${ico[s.st]} ${s.name}${s.msg ? ` <span style="color:var(--muted);font-size:12px">— ${s.msg}</span>` : ""}</div>`).join("")}</div>
       <div id="bulkDone"></div></div>`;
   };
@@ -2420,7 +2431,7 @@ async function bulkGenerateReports(ids) {
       stage.innerHTML = "";
       ReportView.renderInto(stage, resp.sections, { editable: true });
       const cli = state.clients.find((c) => c.projectId === s.pid) || {};
-      await Promise.all(resp.sections.map((sec) => sec.platform === "otimizacoes" ? fillOptimReview(sec, s.name, per.monthLabel, { root: stage }) : Promise.all([fillReportAnalysis(sec, s.name, per.monthLabel, { root: stage, benchmarks: cli.benchmarks || {} }), fillCampaignAnalysis(sec, s.name, per.monthLabel, { root: stage })])));
+      await Promise.all(resp.sections.map((sec) => sec.platform === "otimizacoes" ? fillOptimReview(sec, s.name, per.monthLabel, { root: stage, engine }) : Promise.all([fillReportAnalysis(sec, s.name, per.monthLabel, { root: stage, benchmarks: cli.benchmarks || {}, engine }), fillCampaignAnalysis(sec, s.name, per.monthLabel, { root: stage, engine })])));
       const pageEl = stage.querySelector(".rr-page");
       await window.api.historySave({ projectId: s.pid, clientName: s.name, kind: "report", monthLabel: per.monthLabel, title: `Relatório ${per.monthLabel}`, html: reportHtmlForSave(pageEl) });
       s.st = "ok"; render();
@@ -2490,7 +2501,7 @@ async function fillReportAnalysis(sec, cName, monthLabel, opts) {
       kpis: (sec.kpis || []).map((k) => ({ label: k.label, value: k.value, prev: k.prev, kind: k.kind })),
       adsets: pick(raw.adsets), ads: pick(raw.ads), quali: sec.quali || null,
       benchmarks: repBenchList(sec.platform, opts.benchmarks),
-      obs: sec.obs || "", mode: sec.mode || "mensal",
+      obs: sec.obs || "", mode: sec.mode || "mensal", engine: opts.engine || repEngine(),
     });
     const points = parseAnalysisPoints(txt);
     const B = { geral: [], publicos: [], anuncios: [], proximos: [] };
@@ -2522,7 +2533,7 @@ async function fillCampaignAnalysis(sec, cName, monthLabel, opts) {
   const campaigns = (sec.raw && sec.raw.campaigns) || [];
   if (!campaigns.length) { el.remove(); return; }
   try {
-    const txt = await window.api.reportAnalyzeCampaigns({ clientName: cName, monthLabel, label: sec.label, campaigns, obs: sec.obs || "" });
+    const txt = await window.api.reportAnalyzeCampaigns({ clientName: cName, monthLabel, label: sec.label, campaigns, obs: sec.obs || "", engine: opts.engine || repEngine() });
     const pts = parseAnalysisPoints(txt);
     if (pts.length) { el.innerHTML = pointsToHtml(pts); el.contentEditable = "true"; } else el.remove();
   } catch (e) {
@@ -2540,7 +2551,7 @@ async function fillOptimReview(sec, cName, monthLabel, opts) {
   const el = root.querySelector('[data-analysis="otim-review"]');
   if (!el) return;
   try {
-    const txt = await window.api.reportReviewOptim({ clientName: cName, monthLabel, trelloCards: (sec.trelloCards || []).map((c) => ({ name: c.name, date: c.date })), groups: (sec.otimGroups || []).map((g) => ({ label: g.label, items: (g.items || []).map((it) => ({ text: it.text, detail: it.detail })) })) });
+    const txt = await window.api.reportReviewOptim({ clientName: cName, monthLabel, engine: opts.engine || repEngine(), trelloCards: (sec.trelloCards || []).map((c) => ({ name: c.name, date: c.date })), groups: (sec.otimGroups || []).map((g) => ({ label: g.label, items: (g.items || []).map((it) => ({ text: it.text, detail: it.detail })) })) });
     const pts = parseAnalysisPoints(txt);
     if (pts.length) el.innerHTML = pointsToHtml(pts);
     else { const p = document.createElement("p"); p.textContent = String(txt || "").replace(/^\s*##\s*.*\n?/gm, "").trim(); el.innerHTML = ""; el.appendChild(p); }
@@ -2661,7 +2672,7 @@ async function addMetricAnalysis(sec, secData, m) {
   if (g) g.appendChild(ph);
   try {
     const plat = secData ? secData.platform : (sec.querySelector(".rr-addmetric") || {}).dataset?.platform;
-    const txt = await window.api.reportAnalyzeMetric({ clientName: d.cName, monthLabel: d.monthLabel, platformLabel: secData ? secData.label : "", label: m.label, kind: m.kind, value: m.value, prev: m.prev, bench: plat ? repBenchOf(plat, m.label) : null });
+    const txt = await window.api.reportAnalyzeMetric({ clientName: d.cName, monthLabel: d.monthLabel, platformLabel: secData ? secData.label : "", label: m.label, kind: m.kind, value: m.value, prev: m.prev, bench: plat ? repBenchOf(plat, m.label) : null, engine: (d.engine || repEngine()) });
     const pts = parseAnalysisPoints(txt);
     if (ph.parentNode) ph.remove();
     if (g) { if (pts.length) pts.forEach((pt) => appendPoint(g, pt.title || m.label, pt.body)); else appendPoint(g, m.label, String(txt).replace(/^\s*##\s*.*\n?/, "").trim()); }
