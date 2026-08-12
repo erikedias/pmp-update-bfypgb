@@ -1659,18 +1659,32 @@ ipcMain.handle("googleads:connect", async (_e, { clientId, clientSecret }) => {
 });
 
 // versões candidatas da Google Ads API (a API descontinua versões antigas ~3x/ano).
-// tenta a salva primeiro, depois as candidatas, e guarda a que funcionar.
-const GADS_VERSIONS = ["v21", "v20", "v19", "v18", "v17"];
+// tenta a salva primeiro, depois as candidatas (da mais nova pra mais antiga), e guarda a
+// que funcionar. Versões muito novas ainda não existem (404) e versões antigas ficam
+// descontinuadas/bloqueadas (400 "deprecated"/"blocked") — em ambos os casos pulamos pra próxima.
+const GADS_VERSIONS = ["v27", "v26", "v25", "v24", "v23", "v22", "v21"];
+// erro que significa "essa versão não serve, tenta a próxima" (não é falha de credencial/dado)
+function gadsVersionErr(e) {
+  if (e.status === 404) return true; // versão ainda não existe
+  const msg = String(e.message || "");
+  return /deprecat|will be blocked|is blocked|invalid version|unsupported version|not found/i.test(msg);
+}
 async function googleAdsApi(pathAfterVersion, opts) {
   const s = readStore().settings;
-  const order = s.googleAdsApiVersion ? [s.googleAdsApiVersion, ...GADS_VERSIONS.filter((v) => v !== s.googleAdsApiVersion)] : GADS_VERSIONS;
+  const saved = s.googleAdsApiVersion;
+  const order = saved ? [saved, ...GADS_VERSIONS.filter((v) => v !== saved)] : GADS_VERSIONS;
   let lastErr;
   for (const v of order) {
     try {
       const r = await httpJson(`https://googleads.googleapis.com/${v}/${pathAfterVersion}`, opts);
-      if (v !== s.googleAdsApiVersion) { const st = readStore(); st.settings.googleAdsApiVersion = v; writeStore(st); }
+      if (v !== saved) { const st = readStore(); st.settings.googleAdsApiVersion = v; writeStore(st); }
       return r;
-    } catch (e) { lastErr = e; if (e.status !== 404) throw e; }
+    } catch (e) {
+      lastErr = e;
+      if (!gadsVersionErr(e)) throw e; // erro real (credencial, permissão, dado) — não adianta trocar de versão
+      // a versão salva quebrou (foi descontinuada): limpa pra não insistir nela nas próximas chamadas
+      if (v === saved) { try { const st = readStore(); delete st.settings.googleAdsApiVersion; writeStore(st); } catch {} }
+    }
   }
   throw lastErr;
 }
