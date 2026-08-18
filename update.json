@@ -1,6 +1,6 @@
 {
-  "version": "1.3.36",
-  "notes": "Corrige conexão com Google Ads: a v21 da API foi descontinuada/bloqueada. Agora o app usa automaticamente a versão mais nova disponível (v25) e pula versões bloqueadas/inexistentes sozinho",
+  "version": "1.3.37",
+  "notes": "Corrige geração de relatório nos apps dos analistas: (1) limite/cota do Gemini por minuto agora tenta de novo com espera antes de desistir + no máx 2 chamadas simultâneas; (2) quando o Claude Code não está instalado, cai pro Gemini em vez de dar 'spawn claude ENOENT'",
   "files": [
     "src/app.js",
     "src/engine.js",

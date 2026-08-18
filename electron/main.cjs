@@ -2072,19 +2072,33 @@ ipcMain.handle("googleads:accounts", async () => {
 const { spawn } = require("child_process");
 let lastAIEngine = "—"; // pra dar visibilidade de qual motor respondeu
 
-// acha o binário do Claude Code (usa o login/plano que já está logado nessa máquina)
-function claudeBinary() {
+// acha o binário do Claude Code (usa o login/plano que já está logado nessa máquina).
+// Resolve DE VERDADE (não retorna "claude" às cegas): assim, em máquina SEM Claude Code instalado,
+// claudeAvailable() devolve false e o app cai pro Gemini em vez de estourar "spawn claude ENOENT".
+let _claudeBinCache; // undefined = ainda não checou · null = não achou · string = caminho
+function resolveClaudeBinary() {
   const s = readStore().settings;
-  if (s.claudeCliPath) return s.claudeCliPath;
-  const cands = [path.join(os.homedir(), ".local/bin/claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude"];
-  for (const c of cands) { try { if (fs.existsSync(c)) return c; } catch {} }
-  return "claude"; // fallback no PATH
+  if (s.claudeCliPath) { try { if (fs.existsSync(s.claudeCliPath)) return s.claudeCliPath; } catch {} }
+  if (_claudeBinCache !== undefined) return _claudeBinCache;
+  const home = os.homedir();
+  const cands = [
+    path.join(home, ".local/bin/claude"),
+    path.join(home, ".claude/local/claude"),
+    "/opt/homebrew/bin/claude", "/usr/local/bin/claude",
+    path.join(home, ".npm-global/bin/claude"),
+  ];
+  for (const c of cands) { try { if (fs.existsSync(c)) { _claudeBinCache = c; return c; } } catch {} }
+  // não achou nos caminhos comuns: procura no PATH via shell de LOGIN (o Finder abre o app com PATH mínimo)
+  try {
+    const { execSync } = require("child_process");
+    const found = execSync('/bin/zsh -lc "command -v claude" 2>/dev/null || /bin/bash -lc "command -v claude" 2>/dev/null', { encoding: "utf8", timeout: 4000 }).trim().split("\n")[0];
+    if (found && fs.existsSync(found)) { _claudeBinCache = found; return found; }
+  } catch {}
+  _claudeBinCache = null;
+  return null;
 }
-function claudeAvailable() {
-  const b = claudeBinary();
-  if (b.includes("/")) { try { return fs.existsSync(b); } catch { return false; } }
-  return true;
-}
+function claudeBinary() { return resolveClaudeBinary() || "claude"; }
+function claudeAvailable() { return resolveClaudeBinary() != null; }
 // roda o Claude Code em modo silencioso (-p), prompt via stdin, modelo Sonnet por padrão (mais barato).
 // IMPORTANTE: quando o app é aberto pelo Finder o ambiente é mínimo e faltam USER/LOGNAME/HOME —
 // sem eles o Claude não acha o login no Keychain ("Not logged in"). Garantimos essas variáveis aqui.
@@ -2113,7 +2127,7 @@ function runClaudeCli(prompt, model) {
     const timer = setTimeout(() => { try { child.kill("SIGKILL"); } catch {} reject(new Error("Claude CLI demorou demais (timeout).")); }, 300000);
     child.stdout.on("data", (d) => { out += d; });
     child.stderr.on("data", (d) => { err += d; });
-    child.on("error", (e) => { clearTimeout(timer); reject(e); });
+    child.on("error", (e) => { clearTimeout(timer); reject(e && e.code === "ENOENT" ? new Error("Claude Code não está instalado nesta máquina — use o Gemini (⚙️ Configurações) ou instale o Claude Code.") : e); });
     child.on("close", (code) => {
       clearTimeout(timer);
       const txt = stripModelNote(out.trim());
@@ -2176,7 +2190,34 @@ function geminiKeyError(e) {
   return null; // provavelmente erro de modelo/temporário → tenta outro modelo
 }
 
+// extrai o "retryDelay" (ex.: "37s") que o Gemini manda no corpo do erro 429, em ms (ou 0 se não vier)
+function geminiRetryDelayMs(e) {
+  try {
+    const details = (e.body && e.body.error && e.body.error.details) || [];
+    for (const d of details) {
+      if (d.retryDelay) { const m = String(d.retryDelay).match(/([\d.]+)s/); if (m) return Math.ceil(parseFloat(m[1]) * 1000); }
+    }
+  } catch {}
+  return 0;
+}
+
+// limitador simples: no máximo 2 chamadas ao Gemini ao mesmo tempo (evita estourar o limite POR MINUTO
+// na geração em massa, onde dezenas de análises disparam juntas). As demais esperam a vez numa fila.
+let _gemActive = 0; const _gemQueue = [];
+const GEM_MAX_CONCURRENT = 2;
+function _gemAcquire() {
+  return new Promise((res) => {
+    const tryRun = () => { if (_gemActive < GEM_MAX_CONCURRENT) { _gemActive++; res(); } else _gemQueue.push(tryRun); };
+    tryRun();
+  });
+}
+function _gemRelease() { _gemActive = Math.max(0, _gemActive - 1); const next = _gemQueue.shift(); if (next) next(); }
 async function geminiAnalyze(s, prompt, images, modelOverride) {
+  await _gemAcquire();
+  try { return await geminiAnalyzeCore(s, prompt, images, modelOverride); }
+  finally { _gemRelease(); }
+}
+async function geminiAnalyzeCore(s, prompt, images, modelOverride) {
   if (!s.geminiKey) throw new Error("Configure a chave do Gemini em ⚙️ Configurações.");
   const parts = [{ text: prompt }];
   // imagens (data URLs) — Gemini é multimodal, lê o print pra identificar o que ela apontou
@@ -2196,11 +2237,20 @@ async function geminiAnalyze(s, prompt, images, modelOverride) {
       try { body = await httpJson(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload }); break; }
       catch (e) {
         lastErr = e;
-        // erro de CHAVE/COTA → não adianta trocar de modelo nem repetir: mostra a solução e para
+        const is429 = e.status === 429 || /RESOURCE_EXHAUSTED|quota|rate limit/i.test(String(e.message || ""));
+        // COTA/429: quase sempre é limite POR MINUTO (recupera em ~1 min) — tenta de novo com espera
+        // maior (respeitando o retryDelay que o Gemini às vezes manda) ANTES de desistir. Só mostra a
+        // mensagem de cota estourada depois de esgotar as tentativas.
+        if (is429 && attempt <= 5) {
+          const wait = Math.min(geminiRetryDelayMs(e) || attempt * 5000, 30000);
+          console.log(`[gemini] ${model} 429 (cota/min), retry ${attempt} em ${Math.round(wait / 1000)}s`);
+          await sleep(wait); continue;
+        }
+        // erro de CHAVE (inválida/desativada/restrita) ou cota já esgotada → mostra a solução e para
         const keyMsg = geminiKeyError(e);
         if (keyMsg) throw new Error(keyMsg);
         // sobrecarga temporária → repete no mesmo modelo
-        if ([429, 500, 503].includes(e.status) && attempt < 4) { console.log(`[gemini] ${model} ${e.status}, retry ${attempt}`); await sleep(attempt * 2000); continue; }
+        if ([500, 503].includes(e.status) && attempt < 4) { console.log(`[gemini] ${model} ${e.status}, retry ${attempt}`); await sleep(attempt * 2000); continue; }
         console.log(`[gemini] ${model} falhou:`, e.message); // ex.: 404 modelo inexistente → tenta o próximo
         break;
       }
