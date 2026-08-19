@@ -1,6 +1,6 @@
 {
-  "version": "1.3.37",
-  "notes": "Corrige geração de relatório nos apps dos analistas: (1) limite/cota do Gemini por minuto agora tenta de novo com espera antes de desistir + no máx 2 chamadas simultâneas; (2) quando o Claude Code não está instalado, cai pro Gemini em vez de dar 'spawn claude ENOENT'",
+  "version": "1.3.38",
+  "notes": "Relatorios funcionam com QUALQUER chave Gemini: se os modelos padrao nao existirem na chave, o app descobre sozinho (ListModels) quais a conta suporta e usa o melhor. Claude Code interno segue disponivel pra quem tiver instalado.",
   "files": [
     "src/app.js",
     "src/engine.js",

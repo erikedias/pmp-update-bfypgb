@@ -2201,6 +2201,35 @@ function geminiRetryDelayMs(e) {
   return 0;
 }
 
+// descobre os modelos que ESTA chave realmente suporta pra generateContent (cada projeto/chave tem
+// modelos diferentes disponíveis — por isso lista fixa quebra). Cacheia por chave por 1h. Ordena
+// preferindo flash (rápido/barato) e versões mais novas, evitando preview/exp/vision/thinking.
+const _gemModelCache = {};
+function _rankGemModel(name) {
+  let score = 0;
+  if (/flash/.test(name)) score += 100;          // flash: rápido e barato (preferido)
+  if (/flash-lite/.test(name)) score += 10;      // lite é ainda mais barato
+  const ver = (name.match(/gemini-(\d+)\.(\d+)/) || []);
+  if (ver[1]) score += parseInt(ver[1], 10) * 10 + parseInt(ver[2] || "0", 10); // versão mais nova primeiro
+  if (/latest/.test(name)) score += 5;
+  if (/(preview|exp|thinking|vision|image|tts|audio|embedding|learnlm)/.test(name)) score -= 200; // evita especiais
+  return score;
+}
+async function geminiUsableModels(s) {
+  const key = s.geminiKey;
+  const cached = _gemModelCache[key];
+  if (cached && Date.now() - cached.ts < 3600000) return cached.models;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=1000`;
+  const body = await httpJson(url); // se a chave for inválida/desativada, o erro sobe e é tratado lá em cima
+  const models = (body.models || [])
+    .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
+    .map((m) => String(m.name || "").replace(/^models\//, ""))
+    .filter(Boolean)
+    .sort((a, b) => _rankGemModel(b) - _rankGemModel(a));
+  _gemModelCache[key] = { ts: Date.now(), models };
+  return models;
+}
+
 // limitador simples: no máximo 2 chamadas ao Gemini ao mesmo tempo (evita estourar o limite POR MINUTO
 // na geração em massa, onde dezenas de análises disparam juntas). As demais esperam a vez numa fila.
 let _gemActive = 0; const _gemQueue = [];
@@ -2223,11 +2252,14 @@ async function geminiAnalyzeCore(s, prompt, images, modelOverride) {
   // imagens (data URLs) — Gemini é multimodal, lê o print pra identificar o que ela apontou
   (images || []).forEach((img) => { if (img && /^data:/.test(img)) { const [meta, b64] = img.split(","); const mime = (meta.match(/data:([^;]+)/) || [])[1] || "image/png"; parts.push({ inline_data: { mime_type: mime, data: b64 } }); } });
   // tenta o modelo configurado e, se ele não existir pra essa chave (404) ou vier vazio, cai pra alternativas.
+  // Se TODAS as alternativas fixas falharem, DESCOBRE via ListModels os modelos que a chave suporta de
+  // verdade e tenta esses — assim funciona com qualquer conta/chave do Gemini, mesmo sem os modelos "padrão".
   const configured = modelOverride || s.geminiModel || "gemini-2.5-flash";
-  const fallbacks = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest", "gemini-1.5-flash"];
+  const fallbacks = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"];
   const models = [configured, ...fallbacks.filter((m) => m !== configured)];
-  let lastErr = null;
-  for (const model of models) {
+  let lastErr = null, discovered = false;
+  for (let mi = 0; mi < models.length; mi++) {
+    const model = models[mi];
     const gen = { temperature: 0.7, maxOutputTokens: 8192 };
     if (/2\.5/.test(model)) gen.thinkingConfig = { thinkingBudget: 0 }; // thinkingConfig só existe no 2.5
     const payload = JSON.stringify({ contents: [{ parts }], generationConfig: gen });
@@ -2264,8 +2296,19 @@ async function geminiAnalyzeCore(s, prompt, images, modelOverride) {
     if (/SAFETY|BLOCK|PROHIBITED/i.test(reason)) throw new Error(`O Gemini bloqueou a resposta por política de conteúdo (${reason}). Ajuste o texto e tente de novo.`);
     lastErr = new Error(`Gemini não retornou texto (${reason}).`);
     // vazio por MAX_TOKENS/thinking → tenta o próximo modelo (ex.: um sem "thinking")
+
+    // esgotou a lista fixa sem sucesso: descobre os modelos reais da chave e continua tentando esses
+    if (mi === models.length - 1 && !discovered) {
+      discovered = true;
+      try {
+        const extra = await geminiUsableModels(s);
+        for (const e of extra) if (!models.includes(e)) models.push(e);
+        if (extra.length) console.log(`[gemini] modelos descobertos p/ esta chave: ${extra.slice(0, 6).join(", ")}${extra.length > 6 ? "…" : ""}`);
+      } catch (err) { console.log("[gemini] não deu pra listar modelos:", err.message); const km = geminiKeyError(err); if (km) throw new Error(km); }
+    }
   }
   if (lastErr && lastErr.status === 503) throw new Error("Gemini sobrecarregado no momento. Tente de novo em alguns segundos.");
+  if (lastErr && lastErr.status === 404) throw new Error("A chave do Gemini não tem nenhum modelo de texto disponível (todos deram 404). Gere uma chave nova em https://aistudio.google.com/apikey (já vem com os modelos atuais ativados) e cole em ⚙️ Configurações.");
   throw new Error((lastErr && lastErr.message) || "Não consegui gerar com o Gemini. Confira a chave em ⚙️ Configurações.");
 }
 
