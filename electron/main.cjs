@@ -3393,6 +3393,116 @@ ipcMain.handle("history:save", (_e, record) => {
   return record.id;
 });
 
+/* ---------------------------------------------------------- */
+/* LABORATÓRIO — registro de otimizações/testes por cliente     */
+/* (o que foi feito, hipótese, gargalo alvo, resultado) +       */
+/* sugestão de próximos testes por IA + sync no Obsidian        */
+/* ---------------------------------------------------------- */
+const EXP_STATUS = ["rodando", "vencedor", "concluido", "descartado"];
+ipcMain.handle("experiments:list", (_e, projectId) =>
+  (readStore().experiments || []).filter((x) => !projectId || x.projectId === projectId)
+    .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))));
+
+ipcMain.handle("experiments:save", (_e, x) => {
+  const st = readStore();
+  if (!st.experiments) st.experiments = [];
+  const now = new Date().toISOString();
+  if (x.id) {
+    const ix = st.experiments.findIndex((e) => e.id === x.id);
+    if (ix >= 0) { st.experiments[ix] = Object.assign({}, st.experiments[ix], x, { updatedAt: now }); writeStore(st); return st.experiments[ix]; }
+  }
+  const rec = Object.assign({ id: `exp-${Date.now()}`, createdAt: now, updatedAt: now, status: "rodando" }, x);
+  if (!EXP_STATUS.includes(rec.status)) rec.status = "rodando";
+  st.experiments.push(rec); writeStore(st); return rec;
+});
+
+ipcMain.handle("experiments:delete", (_e, id) => {
+  const st = readStore(); st.experiments = (st.experiments || []).filter((e) => e.id !== id); writeStore(st); return true;
+});
+
+// monta o prompt de SUGESTÃO DE PRÓXIMOS TESTES: usa os dados ao vivo, o conhecimento do cliente
+// (Obsidian) e o que JÁ foi testado — pra propor coisas NOVAS e variadas, não repetir o já feito.
+function buildLabSuggestPrompt(d, vaultTxt) {
+  const fv = (kind, v) => (v == null || isNaN(v)) ? "sem dado" : kind === "brl" ? "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : kind === "pct" ? parseFloat(Number(v).toFixed(2)) + "%" : Number(v).toLocaleString("pt-BR");
+  const dl = (v, p) => (p == null || p === 0 || v == null) ? "" : (() => { const x = parseFloat(((v - p) / p * 100).toFixed(1)); return ` (${x > 0 ? "+" : ""}${x}% vs período anterior)`; })();
+  const metricsTxt = (d.metrics || []).map((m) => {
+    const kpis = (m.kpis || []).map((k) => `  - ${k.label}: ${fv(k.kind, k.value)}${dl(k.value, k.prev)}`).join("\n");
+    return `${m.label || m.platform}:\n${kpis || "  (sem métricas)"}`;
+  }).join("\n\n");
+  const past = (d.pastExperiments || []).map((e) => {
+    const st = { rodando: "em teste", vencedor: "VENCEU", concluido: "concluído", descartado: "descartado/não funcionou" }[e.status] || e.status;
+    return `- [${st}] ${e.platform ? e.platform + " · " : ""}${e.acao || ""}${e.hipotese ? ` (hipótese: ${e.hipotese})` : ""}${e.resultado ? ` → resultado: ${e.resultado}` : ""}`;
+  }).join("\n");
+  return [
+    `Você é analista SÊNIOR de mídia paga. Sugira os PRÓXIMOS TESTES/otimizações para o cliente "${d.clientName}" (${d.monthLabel || "período atual"}), com base nos dados ao vivo, no conhecimento do cliente e no que JÁ foi testado.`,
+    `REGRAS DE OURO:`,
+    `1) NÃO repita nada que já está na lista "JÁ TESTADO" abaixo — proponha coisas DIFERENTES ou a evolução lógica do que já foi feito (ex.: se já trocou criativo e melhorou, sugira escalar/variar ângulo; se descartou algo, não sugira de novo).`,
+    `2) Vá ALÉM do óbvio de benchmark. Como temos acesso direto às plataformas (Meta/Google/LinkedIn), proponha dinâmicas variadas: testes de público/segmentação, novos ângulos de criativo, estrutura de campanha (CBO/ABO), lances/orçamento, formatos (vídeo/carrossel/coleção), landing/oferta, exclusões e negativações, remarketing/lookalike, horários, etc. — sempre ligado a um gargalo real dos dados.`,
+    `3) Cada teste deve atacar um gargalo concreto que aparece nas métricas, e ser algo ACIONÁVEL nesta semana.`,
+    `FORMATO: responda SÓ um array JSON. Cada item: {"titulo":"curto","plataforma":"Meta|Google|LinkedIn|Geral","gargalo":"qual métrica/etapa está travando","acao":"o que testar e COMO fazer, prático","hipotese":"o que esperamos melhorar e por quê","comoMedir":"métrica-alvo + prazo (ex.: CPL cair 15% em 7 dias)"}. Entre 3 e 6 itens, do mais impactante pro menos. Português, objetivo, sem markdown fora do JSON.`,
+    `\nMÉTRICAS AO VIVO:\n${metricsTxt || "(sem métricas informadas)"}`,
+    past ? `\nJÁ TESTADO (NÃO repetir):\n${past}` : `\nJÁ TESTADO: (nenhum registro ainda)`,
+    vaultTxt ? `\nCONHECIMENTO DO CLIENTE (persona, concorrência, o que faz/não faz — use pra contextualizar as sugestões):\n"""${vaultTxt}"""` : "",
+  ].filter(Boolean).join("\n");
+}
+function parseLabSuggestions(raw) {
+  const t = String(raw || "");
+  const m = t.match(/\[[\s\S]*\]/);
+  if (!m) return [];
+  try { const arr = JSON.parse(m[0]); return Array.isArray(arr) ? arr : []; } catch { return []; }
+}
+ipcMain.handle("lab:suggestTests", async (_e, d) => {
+  const s = readStore().settings;
+  let vaultTxt = "";
+  try { const v = findVault(d.projectId, d.clientName); if (v) vaultTxt = readVaultAll(v, 8000); } catch {}
+  const raw = await aiReport(s, buildLabSuggestPrompt(d, vaultTxt), d.engine);
+  const list = parseLabSuggestions(raw);
+  if (!list.length) throw new Error("A IA não retornou sugestões legíveis. Tente de novo.");
+  return list;
+});
+
+// gera o markdown do histórico de testes e grava no cofre Obsidian do cliente (nota fixa)
+function buildLabMarkdown(clientName, exps) {
+  const stLabel = { rodando: "🧪 Em teste", vencedor: "✅ Venceu", concluido: "📊 Concluído", descartado: "🗑️ Descartado" };
+  const fmt = (iso) => { try { return new Date(iso).toLocaleDateString("pt-BR"); } catch { return ""; } };
+  const byStatus = (st) => exps.filter((e) => (e.status || "rodando") === st);
+  const block = (e) => [
+    `### ${e.acao || "(sem título)"}`,
+    `- **Status:** ${stLabel[e.status] || e.status}`,
+    e.platform ? `- **Plataforma:** ${e.platform}` : "",
+    e.gargalo ? `- **Gargalo alvo:** ${e.gargalo}` : "",
+    e.hipotese ? `- **Hipótese:** ${e.hipotese}` : "",
+    e.comoMedir ? `- **Como medir:** ${e.comoMedir}` : "",
+    e.resultado ? `- **Resultado:** ${e.resultado}` : "",
+    `- **Início:** ${fmt(e.createdAt)}${e.resultAt ? ` · **Fechado:** ${fmt(e.resultAt)}` : ""}`,
+  ].filter(Boolean).join("\n");
+  const secs = [];
+  for (const st of ["rodando", "vencedor", "concluido", "descartado"]) {
+    const items = byStatus(st);
+    if (items.length) secs.push(`## ${stLabel[st]} (${items.length})\n\n${items.map(block).join("\n\n")}`);
+  }
+  return `# Otimizações e Testes — ${clientName || ""}\n\nRegistro de tudo que foi testado na conta, com hipótese e resultado. Atualizado pelo Painel de Mídia Paga.\n\n${secs.join("\n\n") || "_Nenhum teste registrado ainda._"}`;
+}
+ipcMain.handle("lab:saveObsidian", async (_e, { projectId, clientName }) => {
+  const exps = (readStore().experiments || []).filter((x) => x.projectId === projectId)
+    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+  if (!exps.length) throw new Error("Nenhum teste registrado pra este cliente ainda.");
+  if (!fs.existsSync(CLIENTS_DIR)) fs.mkdirSync(CLIENTS_DIR, { recursive: true });
+  let vault = findVault(projectId, clientName);
+  let created = false;
+  if (!vault) {
+    vault = sanitizeFs(clientName, "Cliente");
+    const dir = path.join(CLIENTS_DIR, vault);
+    fs.mkdirSync(dir, { recursive: true });
+    const main = path.join(dir, vault + ".md");
+    if (!fs.existsSync(main)) fs.writeFileSync(main, `---\nreportei_project_id: ${projectId || ""}\n---\n\n# ${clientName || vault}\n\nCofre criado pelo Painel de Mídia Paga.\n`);
+    created = true;
+  }
+  const file = path.join(CLIENTS_DIR, vault, "Otimizações e Testes.md");
+  fs.writeFileSync(file, buildLabMarkdown(clientName, exps) + "\n");
+  return { vault, file: "Otimizações e Testes.md", created, count: exps.length };
+});
+
 ipcMain.handle("open:external", (_e, url) => shell.openExternal(url));
 
 /* ---------------------------------------------------------- */

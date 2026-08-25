@@ -99,13 +99,14 @@ function toast(msg, isErr) {
 }
 
 /* ---------------- navegação ---------------- */
-const ALL_VIEWS = ["semana", "painel", "verba", "urgencia", "funil", "subida", "termos", "kw", "meta", "gads", "gtm", "perfil", "relatorios", "historico", "config"];
+const ALL_VIEWS = ["semana", "painel", "verba", "urgencia", "funil", "subida", "termos", "kw", "meta", "gads", "gtm", "perfil", "lab", "relatorios", "historico", "config"];
 $$(".nav .tab").forEach((b) => b.addEventListener("click", () => {
   $$(".nav .tab").forEach((x) => x.classList.remove("active"));
   b.classList.add("active");
   ALL_VIEWS.forEach((v) => $("#view-" + v).classList.toggle("hidden", v !== b.dataset.view));
   if (b.dataset.view === "semana") renderSemana();
   if (b.dataset.view === "verba") initVerba();
+  if (b.dataset.view === "lab") initLab();
   if (b.dataset.view === "termos" && $("#termCampSel") && !$("#termCampSel").value && $("#termCampSel").options.length <= 1) loadTermCampaigns();
   if (b.dataset.view === "kw") loadKw();
   if (b.dataset.view === "historico") renderHistory();
@@ -832,7 +833,8 @@ async function startLinkBoard(i) {
 }
 
 function fillClientSelectors() {
-  ["#clientSel", "#histClientSel", "#repClientSel", "#subClientSel", "#termClientSel", "#perfClientSel", "#kwClientSel"].forEach((sel) => {
+  ["#clientSel", "#histClientSel", "#repClientSel", "#subClientSel", "#termClientSel", "#perfClientSel", "#kwClientSel", "#labClientSel"].forEach((sel) => {
+    if (!$(sel)) return;
     const el = $(sel); const prev = el.value;
     el.innerHTML = state.clients.map((c) => `<option value="${c.projectId}">${c.name}</option>`).join("");
     if (prev) el.value = prev;
@@ -4215,6 +4217,173 @@ async function loadVerbaWeeks(c, container, mm) {
     out.push(`<div class="verba-week-row"><div class="verba-week-lbl">Dias ${r.sd}–${r.fullEnd}${partial}</div><div class="verba-week-plats">${parts}</div></div>`);
   }
   container.innerHTML = out.join("") || '<div class="verba-muted">Sem semanas para mostrar ainda.</div>';
+}
+
+/* ============ ABA LABORATÓRIO (otimizações/testes por cliente) ============ */
+let labWired = false, labEditingId = null;
+const LAB_STATUS = {
+  rodando: { label: "🧪 Em teste", cls: "run" },
+  vencedor: { label: "✅ Venceu", cls: "win" },
+  concluido: { label: "📊 Concluído", cls: "done" },
+  descartado: { label: "🗑️ Descartado", cls: "drop" },
+};
+function labClient() { const pid = Number($("#labClientSel").value); return state.clients.find((c) => c.projectId === pid) || null; }
+function initLab() {
+  if (!$("#labClientSel").value && state.clients[0]) $("#labClientSel").value = state.clients[0].projectId;
+  if (!labWired) {
+    labWired = true;
+    $("#labClientSel").addEventListener("change", () => { $("#labSuggestBox").classList.add("hidden"); renderLab(); });
+    $("#labNewBtn").addEventListener("click", () => openLabModal(null));
+    $("#labSuggestBtn").addEventListener("click", labSuggest);
+    $("#labObsidianBtn").addEventListener("click", labSaveObsidian);
+    $("#labModalClose").addEventListener("click", closeLabModal);
+    $("#labCancelBtn").addEventListener("click", closeLabModal);
+    $("#labSaveBtn").addEventListener("click", saveLabExperiment);
+    $("#labDeleteBtn").addEventListener("click", deleteLabExperiment);
+    $("#labModal").addEventListener("click", (e) => { if (e.target.id === "labModal") closeLabModal(); });
+    $("#labBody").addEventListener("click", (e) => { const card = e.target.closest(".lab-card"); if (card) openLabModal(card.dataset.id); });
+    $("#labSuggestBox").addEventListener("click", (e) => {
+      const ad = e.target.closest(".lab-sug-adopt"); if (ad) { adoptSuggestion((state.labSuggestions || [])[Number(ad.dataset.i)]); return; }
+      if (e.target.closest(".lab-sug-close")) $("#labSuggestBox").classList.add("hidden");
+    });
+  }
+  renderLab();
+}
+async function renderLab() {
+  const c = labClient(); const body = $("#labBody");
+  if (!c) { body.innerHTML = `<div class="state">Cadastre um cliente primeiro.</div>`; return; }
+  let exps = [];
+  try { exps = await window.api.experimentsList(c.projectId); } catch {}
+  state.labExps = exps;
+  if (!exps.length) {
+    body.innerHTML = `<div class="state"><div class="big">🧪</div>Nenhum teste registrado pra <b>${vEsc(c.name)}</b> ainda.<br>
+      <span style="font-size:12px">Clique em <b>➕ Novo teste</b> pra registrar o que você fez, ou em <b>💡 Sugerir próximos testes</b> pra a IA propor com base nos dados.</span></div>`;
+    return;
+  }
+  const cols = ["rodando", "vencedor", "concluido", "descartado"].map((st) => {
+    const items = exps.filter((e) => (e.status || "rodando") === st);
+    if (!items.length) return "";
+    return `<div class="lab-col"><div class="lab-col-head lab-${LAB_STATUS[st].cls}">${LAB_STATUS[st].label} <span>${items.length}</span></div>${items.map(labCardHTML).join("")}</div>`;
+  }).filter(Boolean).join("");
+  body.innerHTML = `<div class="lab-grid">${cols}</div>`;
+}
+function labCardHTML(e) {
+  const stt = LAB_STATUS[e.status || "rodando"] || LAB_STATUS.rodando;
+  return `<div class="lab-card lab-b-${stt.cls}" data-id="${e.id}" title="Clique para editar">
+    <div class="lab-card-top">${e.platform ? `<span class="lab-chip">${vEsc(e.platform)}</span>` : ""}<span class="lab-date">${e.createdAt ? fmtBR(e.createdAt) : ""}</span></div>
+    <div class="lab-acao">${vEsc(e.acao || "(sem título)")}</div>
+    ${e.gargalo ? `<div class="lab-meta"><b>Gargalo:</b> ${vEsc(e.gargalo)}</div>` : ""}
+    ${e.hipotese ? `<div class="lab-meta"><b>Hipótese:</b> ${vEsc(e.hipotese)}</div>` : ""}
+    ${e.resultado ? `<div class="lab-result">📈 ${vEsc(e.resultado)}</div>` : (e.comoMedir ? `<div class="lab-meta"><b>Medir:</b> ${vEsc(e.comoMedir)}</div>` : "")}
+  </div>`;
+}
+function openLabModal(id) {
+  labEditingId = id || null;
+  const e = id ? (state.labExps || []).find((x) => x.id === id) : null;
+  $("#labModalTitle").textContent = e ? "Editar teste" : "Novo teste";
+  $("#labAcao").value = (e && e.acao) || "";
+  $("#labPlatform").value = (e && e.platform) || "";
+  $("#labStatus").value = (e && e.status) || "rodando";
+  $("#labGargalo").value = (e && e.gargalo) || "";
+  $("#labHipotese").value = (e && e.hipotese) || "";
+  $("#labComoMedir").value = (e && e.comoMedir) || "";
+  $("#labResultado").value = (e && e.resultado) || "";
+  $("#labDeleteBtn").style.display = e ? "inline-flex" : "none";
+  $("#labModal").classList.remove("hidden");
+  setTimeout(() => $("#labAcao").focus(), 50);
+}
+function closeLabModal() { $("#labModal").classList.add("hidden"); labEditingId = null; }
+async function saveLabExperiment() {
+  const c = labClient(); if (!c) return;
+  const acao = $("#labAcao").value.trim();
+  if (!acao) { toast("Descreva o que você testou.", true); return; }
+  const rec = {
+    projectId: c.projectId, clientName: c.name, acao,
+    platform: $("#labPlatform").value, status: $("#labStatus").value,
+    gargalo: $("#labGargalo").value.trim(), hipotese: $("#labHipotese").value.trim(),
+    comoMedir: $("#labComoMedir").value.trim(), resultado: $("#labResultado").value.trim(),
+  };
+  if (labEditingId) rec.id = labEditingId;
+  if (rec.resultado) rec.resultAt = new Date().toISOString();
+  try { await window.api.experimentsSave(rec); closeLabModal(); renderLab(); toast("Teste salvo."); }
+  catch (e) { toast("Erro ao salvar: " + e.message, true); }
+}
+async function deleteLabExperiment() {
+  if (!labEditingId) return;
+  if (!window.confirm("Excluir este teste do laboratório?")) return;
+  try { await window.api.experimentsDelete(labEditingId); closeLabModal(); renderLab(); toast("Teste excluído."); }
+  catch (e) { toast("Erro: " + e.message, true); }
+}
+// monta KPIs simples a partir dos totais de uma plataforma (pra alimentar a sugestão da IA)
+function labKpisFromTotals(p) {
+  const t = (p && p.totals) || p || {};
+  const defs = [
+    ["spend", "Investido", "brl"], ["cost", "Investido", "brl"],
+    ["impressions", "Impressões", "num"], ["reach", "Alcance", "num"],
+    ["clicks", "Cliques", "num"], ["ctr", "CTR", "pct"],
+    ["cpc", "CPC", "brl"], ["cpm", "CPM", "brl"],
+    ["leads", "Leads", "num"], ["cpl", "CPL", "brl"],
+    ["conversions", "Conversões", "num"], ["cpa", "Custo/conversão", "brl"],
+    ["sends", "Envios", "num"], ["opens", "Aberturas", "num"],
+  ];
+  const out = [], seen = new Set();
+  for (const [k, label, kind] of defs) { if (t[k] == null || seen.has(label)) continue; seen.add(label); out.push({ label, value: t[k], kind }); }
+  return out;
+}
+async function labSuggest() {
+  const c = labClient(); if (!c) return;
+  const box = $("#labSuggestBox"); box.classList.remove("hidden");
+  box.innerHTML = `<div class="lab-sug-panel"><div class="lab-sug-head"><b>💡 Sugestões de próximos testes</b> <span class="lab-loading">⏳ analisando dados ao vivo + histórico de testes + Obsidian…</span></div></div>`;
+  try {
+    const now = new Date();
+    const monthStart = iso(new Date(now.getFullYear(), now.getMonth(), 1)), today = iso(now);
+    const ads = c.adAccounts || {};
+    let metrics = [];
+    try {
+      const resp = await window.api.reporteiWeekData({ projectId: reporteiIdOf(c), start: monthStart, end: today, includeAds: false, directMeta: ads.meta || null, directGoogle: ads.google || null });
+      metrics = (resp.platforms || []).map((p) => ({ platform: p.platform, label: p.label || p.platform, kpis: labKpisFromTotals(p) }));
+    } catch (err) { console.warn("[lab] sem métricas ao vivo:", err.message); }
+    const past = (state.labExps || []).map((e) => ({ platform: e.platform, acao: e.acao, hipotese: e.hipotese, status: e.status, resultado: e.resultado }));
+    const list = await window.api.labSuggestTests({ projectId: reporteiIdOf(c), clientName: c.name, monthLabel: monthLabelOf(now.getFullYear(), now.getMonth() + 1), metrics, pastExperiments: past, engine: repEngine() });
+    state.labSuggestions = list;
+    renderLabSuggestions(list);
+  } catch (e) {
+    box.innerHTML = `<div class="lab-sug-panel"><div class="lab-sug-head"><b>💡 Sugestões</b><button class="lab-sug-close">✕</button></div><div class="lab-sug-err">⚠️ ${vEsc(e.message)}</div></div>`;
+  }
+}
+function renderLabSuggestions(list) {
+  const box = $("#labSuggestBox");
+  if (!list || !list.length) { box.innerHTML = `<div class="lab-sug-panel"><div class="lab-sug-head"><b>💡 Sugestões</b><button class="lab-sug-close">✕</button></div><div class="lab-sug-err">Nenhuma sugestão retornada. Tente de novo.</div></div>`; return; }
+  const cards = list.map((s, i) => `<div class="lab-sug-card">
+    <div class="lab-sug-top">${s.plataforma ? `<span class="lab-chip">${vEsc(s.plataforma)}</span>` : ""}<b>${vEsc(s.titulo || s.acao || "Teste")}</b></div>
+    ${s.gargalo ? `<div class="lab-meta"><b>Gargalo:</b> ${vEsc(s.gargalo)}</div>` : ""}
+    ${s.acao ? `<div class="lab-meta"><b>O que fazer:</b> ${vEsc(s.acao)}</div>` : ""}
+    ${s.hipotese ? `<div class="lab-meta"><b>Hipótese:</b> ${vEsc(s.hipotese)}</div>` : ""}
+    ${s.comoMedir ? `<div class="lab-meta"><b>Medir:</b> ${vEsc(s.comoMedir)}</div>` : ""}
+    <button class="btn btn-primary lab-sug-adopt" data-i="${i}">➕ Adotar como teste</button>
+  </div>`).join("");
+  box.innerHTML = `<div class="lab-sug-panel">
+    <div class="lab-sug-head"><b>💡 Próximos testes sugeridos</b><span class="lab-sug-sub">com base nos dados ao vivo, no que já foi testado e no Obsidian do cliente</span><button class="lab-sug-close">✕</button></div>
+    <div class="lab-sug-grid">${cards}</div></div>`;
+}
+function adoptSuggestion(s) {
+  if (!s) return;
+  openLabModal(null);
+  $("#labAcao").value = s.acao || s.titulo || "";
+  $("#labPlatform").value = ["Meta", "Google", "LinkedIn", "Geral"].includes(s.plataforma) ? s.plataforma : "";
+  $("#labStatus").value = "rodando";
+  $("#labGargalo").value = s.gargalo || "";
+  $("#labHipotese").value = s.hipotese || "";
+  $("#labComoMedir").value = s.comoMedir || "";
+}
+async function labSaveObsidian() {
+  const c = labClient(); if (!c) return;
+  const btn = $("#labObsidianBtn"), o = btn.textContent; btn.disabled = true; btn.textContent = "⏳ salvando…";
+  try {
+    const r = await window.api.labSaveObsidian({ projectId: c.projectId, clientName: c.name });
+    toast(`Salvo no Obsidian: ${r.vault} / ${r.file} (${r.count} teste${r.count > 1 ? "s" : ""}).`);
+  } catch (e) { toast("Erro ao salvar no Obsidian: " + e.message, true); }
+  finally { btn.disabled = false; btn.textContent = o; }
 }
 
 // re-renderiza a aba se o dia virou e a aba está visível (app aberto de um dia pro outro)

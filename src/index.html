@@ -29,6 +29,7 @@
     <button class="tab" data-view="gtm">🏷️ Tag Manager</button>
     <div class="nav-sep">Relatórios</div>
     <button class="tab" data-view="perfil">👤 Perfil do cliente</button>
+    <button class="tab" data-view="lab">🧪 Laboratório</button>
     <button class="tab" data-view="relatorios">📄 Relatórios</button>
     <button class="tab" data-view="historico">🗂️ Histórico</button>
     <button class="tab" data-view="config">⚙️ Configurações</button>
@@ -301,6 +302,74 @@
           <span style="font-size:12px">Só aparecem clientes com orçamento definido no perfil.</span></div>
       </div>
     </section>
+
+
+    <!-- ============ LABORATÓRIO (otimizações/testes por cliente) ============ -->
+    <section id="view-lab" class="wrap hidden">
+      <div class="topbar">
+        <div class="field">
+          <label>Cliente</label>
+          <select id="labClientSel"></select>
+        </div>
+        <button class="btn btn-primary" id="labNewBtn">➕ Novo teste</button>
+        <button class="btn" id="labSuggestBtn">💡 Sugerir próximos testes</button>
+        <div class="spacer"></div>
+        <button class="btn" id="labObsidianBtn" title="Salva o histórico de testes na nota 'Otimizações e Testes' do cofre deste cliente">📥 Salvar no Obsidian</button>
+      </div>
+      <div id="labSuggestBox" class="hidden"></div>
+      <div id="labBody">
+        <div class="state"><div class="big">🧪</div>Selecione um cliente e registre os testes/otimizações que você fez.<br>
+          <span style="font-size:12px">Cada teste guarda o gargalo alvo, a hipótese e o resultado — e a IA usa isso pra sugerir os próximos.</span></div>
+      </div>
+    </section>
+
+    <!-- modal de novo/editar teste -->
+    <div id="labModal" class="lab-modal hidden">
+      <div class="lab-modal-card">
+        <div class="lab-modal-head"><b id="labModalTitle">Novo teste</b><button class="lab-modal-x" id="labModalClose">✕</button></div>
+        <div class="lab-form">
+          <label>O que você testou / otimizou <span class="req">*</span>
+            <input type="text" id="labAcao" placeholder="Ex.: Troquei o criativo do público frio por vídeo de 15s com nova headline">
+          </label>
+          <div class="lab-row">
+            <label>Plataforma
+              <select id="labPlatform">
+                <option value="">—</option>
+                <option value="Meta">Meta</option>
+                <option value="Google">Google</option>
+                <option value="LinkedIn">LinkedIn</option>
+                <option value="Geral">Geral</option>
+              </select>
+            </label>
+            <label>Status
+              <select id="labStatus">
+                <option value="rodando">🧪 Em teste</option>
+                <option value="vencedor">✅ Venceu</option>
+                <option value="concluido">📊 Concluído</option>
+                <option value="descartado">🗑️ Descartado</option>
+              </select>
+            </label>
+          </div>
+          <label>Gargalo que está atacando
+            <input type="text" id="labGargalo" placeholder="Ex.: CTR baixo no topo (0,4%) / CPL acima do ideal">
+          </label>
+          <label>Hipótese (o que espera melhorar e por quê)
+            <input type="text" id="labHipotese" placeholder="Ex.: vídeo prende mais atenção → CTR sobe e CPC cai">
+          </label>
+          <label>Como medir (métrica-alvo + prazo)
+            <input type="text" id="labComoMedir" placeholder="Ex.: CTR ≥ 1% em 7 dias">
+          </label>
+          <label>Resultado (preencha quando fechar o teste)
+            <textarea id="labResultado" rows="2" placeholder="Ex.: CTR foi de 0,4% para 1,3% em 6 dias; CPL caiu 22%. Manter e escalar."></textarea>
+          </label>
+        </div>
+        <div class="lab-modal-foot">
+          <button class="btn" id="labDeleteBtn" style="margin-right:auto;display:none">🗑️ Excluir</button>
+          <button class="btn" id="labCancelBtn">Cancelar</button>
+          <button class="btn btn-primary" id="labSaveBtn">Salvar teste</button>
+        </div>
+      </div>
+    </div>
 
 
     <!-- ============ RELATÓRIOS ============ -->

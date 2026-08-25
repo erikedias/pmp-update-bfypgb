@@ -82,6 +82,13 @@ contextBridge.exposeInMainWorld("api", {
   leadsHeaders: (sheetUrl) => ipcRenderer.invoke("leads:headers", sheetUrl),
   leadsTest: (cfg) => ipcRenderer.invoke("leads:test", cfg),
 
+  // Laboratório — otimizações/testes por cliente
+  experimentsList: (projectId) => ipcRenderer.invoke("experiments:list", projectId),
+  experimentsSave: (x) => ipcRenderer.invoke("experiments:save", x),
+  experimentsDelete: (id) => ipcRenderer.invoke("experiments:delete", id),
+  labSuggestTests: (args) => ipcRenderer.invoke("lab:suggestTests", args),
+  labSaveObsidian: (args) => ipcRenderer.invoke("lab:saveObsidian", args),
+
   updateCheck: () => ipcRenderer.invoke("update:check"),
   updateApply: (args) => ipcRenderer.invoke("update:apply", args),
   openExternal: (url) => ipcRenderer.invoke("open:external", url),
