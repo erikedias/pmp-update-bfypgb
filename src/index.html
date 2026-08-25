@@ -15,24 +15,38 @@
       <div class="logo">d</div>
       <div>Mídia Paga<small>@diasesteci</small></div>
     </div>
-    <button class="tab active" data-view="semana">🗓️ Minha semana</button>
-    <button class="tab" data-view="painel">📊 Painel da semana</button>
-    <button class="tab" data-view="verba">💰 Verba</button>
-    <button class="tab" data-view="urgencia">🚨 Urgência</button>
-    <button class="tab" data-view="funil">🧠 Funil Studio</button>
-    <button class="tab" data-view="subida">🚀 Subida</button>
-    <button class="tab" data-view="termos">🔎 Termos de busca</button>
-    <button class="tab" data-view="kw">📣 Google Ads</button>
-    <div class="nav-sep">Sessões</div>
-    <button class="tab" data-view="meta">📘 Meta Ads</button>
-    <button class="tab" data-view="gads">🟢 Google Ads</button>
-    <button class="tab" data-view="gtm">🏷️ Tag Manager</button>
-    <div class="nav-sep">Relatórios</div>
-    <button class="tab" data-view="perfil">👤 Perfil do cliente</button>
-    <button class="tab" data-view="lab">🧪 Laboratório</button>
-    <button class="tab" data-view="relatorios">📄 Relatórios</button>
-    <button class="tab" data-view="historico">🗂️ Histórico</button>
-    <button class="tab" data-view="config">⚙️ Configurações</button>
+    <button class="nav-grouphdr" data-group="inicio"><span class="nav-gi">🏠</span> Início <span class="nav-chev">›</span></button>
+    <div class="nav-children" data-group="inicio">
+      <button class="tab active" data-view="semana">🗓️ Minha semana</button>
+      <button class="tab" data-view="painel">📊 Painel da semana</button>
+      <button class="tab" data-view="verba">💰 Verba</button>
+      <button class="tab" data-view="urgencia">🚨 Urgência</button>
+    </div>
+
+    <button class="nav-grouphdr" data-group="operacao"><span class="nav-gi">🔧</span> Operação <span class="nav-chev">›</span></button>
+    <div class="nav-children" data-group="operacao">
+      <button class="tab" data-view="meta">📘 Meta Ads</button>
+      <button class="tab" data-view="gads">🟢 Google Ads (contas)</button>
+      <button class="tab" data-view="kw">🔑 Palavras-chave</button>
+      <button class="tab" data-view="termos">🔎 Termos de busca</button>
+      <button class="tab" data-view="funil">🧠 Funil Studio</button>
+      <button class="tab" data-view="subida">🚀 Subir campanha</button>
+      <button class="tab" data-view="gtm">🏷️ Tag Manager</button>
+    </div>
+
+    <button class="nav-grouphdr" data-group="cliente"><span class="nav-gi">🧠</span> Cliente &amp; Testes <span class="nav-chev">›</span></button>
+    <div class="nav-children" data-group="cliente">
+      <button class="tab" data-view="perfil">👤 Perfil do cliente</button>
+      <button class="tab" data-view="lab">🧪 Laboratório</button>
+    </div>
+
+    <button class="nav-grouphdr" data-group="entrega"><span class="nav-gi">📄</span> Entrega <span class="nav-chev">›</span></button>
+    <div class="nav-children" data-group="entrega">
+      <button class="tab" data-view="relatorios">📄 Relatórios</button>
+      <button class="tab" data-view="historico">🗂️ Histórico</button>
+    </div>
+
+    <button class="nav-grouphdr solo" data-group="ajustes" data-view="config"><span class="nav-gi">⚙️</span> Ajustes</button>
     <div class="spacer"></div>
     <div class="hint" id="navHint">Conecte suas chaves em Configurações para começar.</div>
   </aside>

@@ -100,9 +100,36 @@ function toast(msg, isErr) {
 
 /* ---------------- navegação ---------------- */
 const ALL_VIEWS = ["semana", "painel", "verba", "urgencia", "funil", "subida", "termos", "kw", "meta", "gads", "gtm", "perfil", "lab", "relatorios", "historico", "config"];
+// menu em grupos: abre um grupo por vez (acordeão) e mantém aberto o grupo da aba ativa
+function openNavGroup(name) {
+  $$(".nav-children").forEach((c) => c.classList.toggle("open", c.dataset.group === name));
+  $$(".nav-grouphdr").forEach((h) => h.classList.toggle("expanded", h.dataset.group === name && !h.classList.contains("solo")));
+}
+function openParentGroupOf(tabBtn) {
+  const children = tabBtn && tabBtn.closest(".nav-children");
+  if (children) openNavGroup(children.dataset.group);
+}
+function clearNavActive() { $$(".nav .tab, .nav-grouphdr.solo").forEach((x) => x.classList.remove("active")); }
+// clique no cabeçalho de um grupo → expande/recolhe. O "Ajustes" é solo: é uma aba direta.
+$$(".nav-grouphdr").forEach((h) => {
+  if (h.classList.contains("solo")) {
+    h.addEventListener("click", () => {
+      clearNavActive(); h.classList.add("active");
+      ALL_VIEWS.forEach((v) => $("#view-" + v).classList.toggle("hidden", v !== h.dataset.view));
+    });
+    return;
+  }
+  h.addEventListener("click", () => {
+    const open = h.classList.contains("expanded");
+    if (open) { h.classList.remove("expanded"); const c = $(`.nav-children[data-group="${h.dataset.group}"]`); if (c) c.classList.remove("open"); }
+    else openNavGroup(h.dataset.group);
+  });
+});
+
 $$(".nav .tab").forEach((b) => b.addEventListener("click", () => {
-  $$(".nav .tab").forEach((x) => x.classList.remove("active"));
+  clearNavActive();
   b.classList.add("active");
+  openParentGroupOf(b); // garante que o grupo da aba clicada fique aberto (inclui cliques programáticos)
   ALL_VIEWS.forEach((v) => $("#view-" + v).classList.toggle("hidden", v !== b.dataset.view));
   if (b.dataset.view === "semana") renderSemana();
   if (b.dataset.view === "verba") initVerba();
@@ -115,6 +142,8 @@ $$(".nav .tab").forEach((b) => b.addEventListener("click", () => {
   if (b.dataset.view === "gads") initGadsSession();
   if (b.dataset.view === "gtm") initGtmSession();
 }));
+// abre o grupo da aba ativa ao iniciar (Início, por padrão)
+openParentGroupOf($(".nav .tab.active"));
 
 // links externos (ex.: "onde pegar a chave") abrem no navegador, não dentro do app
 document.addEventListener("click", (e) => {
