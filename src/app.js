@@ -117,7 +117,7 @@ function showView(view) {
   else if (view === "semana") renderSemana();
   else if (view === "verba") initVerba();
   else if (view === "lab") initLab();
-  else if (view === "termos") { if ($("#termCampSel") && !$("#termCampSel").value && $("#termCampSel").options.length <= 1) loadTermCampaigns(); }
+  else if (view === "termos") { loadTermContext(); if ($("#termCampSel") && !$("#termCampSel").value && $("#termCampSel").options.length <= 1) loadTermCampaigns(); }
   else if (view === "kw") loadKw();
   else if (view === "historico") renderHistory();
   else if (view === "perfil") loadPerfil();
@@ -2181,6 +2181,7 @@ $("#termPeriod").addEventListener("change", (e) => {
 
 $("#termBtn").addEventListener("click", async () => {
   const c = termClient(); const body = $("#termBody");
+  if (c) { c.termContext = $("#termService").value; window.api.setClients(state.clients).catch(() => {}); } // garante contexto salvo
   const gid = c && c.adAccounts && c.adAccounts.google;
   if (!gid) { body.innerHTML = `<div class="state error"><div class="big">⚠️</div>Vincule a conta Google deste cliente em ⚙️ Configurações → "contas".</div>`; return; }
   const iso = (d) => d.toISOString().slice(0, 10);
@@ -2235,11 +2236,25 @@ function termServico(c) {
   const prof = (c && c.profile) || {};
   return $("#termService").value.trim() || [prof.servico || prof.oQueFaz, prof.oQueNaoFaz ? "NÃO faz: " + prof.oQueNaoFaz : ""].filter(Boolean).join(". ") || (c && c.name) || "";
 }
-// preenche o campo serviço a partir do perfil quando troca de cliente
+// contexto salvo por cliente: se já tem salvo, usa; senão cai pro perfil do Obsidian
+function termContextDefault(c) {
+  const prof = (c && c.profile) || {};
+  return [prof.servico || prof.oQueFaz, prof.oQueNaoFaz ? "NÃO faz: " + prof.oQueNaoFaz : ""].filter(Boolean).join(". ");
+}
+function loadTermContext() {
+  const c = termClient(); if (!c) return;
+  $("#termService").value = (c.termContext != null && c.termContext !== "") ? c.termContext : termContextDefault(c);
+}
+// preenche o campo serviço quando troca de cliente (contexto salvo tem prioridade)
 $("#termClientSel").addEventListener("change", () => {
-  const c = termClient(); const prof = (c && c.profile) || {};
-  $("#termService").value = [prof.servico || prof.oQueFaz, prof.oQueNaoFaz ? "NÃO faz: " + prof.oQueNaoFaz : ""].filter(Boolean).join(". ");
+  loadTermContext();
   loadTermCampaigns(); // troca de cliente → recarrega as campanhas de Pesquisa
+});
+// salva o contexto no cliente ao terminar de digitar (o change dispara ao sair do campo)
+$("#termService").addEventListener("change", async () => {
+  const c = termClient(); if (!c) return;
+  c.termContext = $("#termService").value;
+  try { await window.api.setClients(state.clients); } catch {}
 });
 
 function renderTermos(neg, add, aiErr) {
