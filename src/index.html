@@ -15,9 +15,9 @@
       <div class="logo">d</div>
       <div>Mídia Paga<small>@diasesteci</small></div>
     </div>
-    <button class="nav-grouphdr" data-group="inicio"><span class="nav-gi">🏠</span> Início <span class="nav-chev">›</span></button>
-    <div class="nav-children" data-group="inicio">
-      <button class="tab active" data-view="semana">🗓️ Minha semana</button>
+    <button class="nav-grouphdr active expanded" data-group="inicio" data-view="inicio"><span class="nav-gi">🏠</span> Início <span class="nav-chev">›</span></button>
+    <div class="nav-children open" data-group="inicio">
+      <button class="tab" data-view="semana">🗓️ Minha semana</button>
       <button class="tab" data-view="painel">📊 Painel da semana</button>
       <button class="tab" data-view="verba">💰 Verba</button>
       <button class="tab" data-view="urgencia">🚨 Urgência</button>
@@ -52,8 +52,24 @@
   </aside>
 
   <main>
+    <!-- ============ INÍCIO (cockpit por cliente) ============ -->
+    <section id="view-inicio" class="wrap">
+      <div class="topbar">
+        <div class="field">
+          <label>Cliente</label>
+          <select id="inicioClientSel"></select>
+        </div>
+        <span class="ck-note">escolha aqui — as outras telas seguem esse cliente</span>
+        <div class="spacer"></div>
+        <button class="btn" id="inicioRefresh">🔄 Atualizar</button>
+      </div>
+      <div id="inicioBody">
+        <div class="state"><div class="big">🏠</div>Selecione um cliente para ver o resumo.</div>
+      </div>
+    </section>
+
     <!-- ============ MINHA SEMANA ============ -->
-    <section id="view-semana" class="wrap">
+    <section id="view-semana" class="wrap hidden">
       <div class="topbar" style="justify-content:space-between">
         <div class="field">
           <label>Hoje</label>

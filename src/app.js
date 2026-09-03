@@ -99,7 +99,7 @@ function toast(msg, isErr) {
 }
 
 /* ---------------- navegação ---------------- */
-const ALL_VIEWS = ["semana", "painel", "verba", "urgencia", "funil", "subida", "termos", "kw", "meta", "gads", "gtm", "perfil", "lab", "relatorios", "historico", "config"];
+const ALL_VIEWS = ["inicio", "semana", "painel", "verba", "urgencia", "funil", "subida", "termos", "kw", "meta", "gads", "gtm", "perfil", "lab", "relatorios", "historico", "config"];
 // menu em grupos: abre um grupo por vez (acordeão) e mantém aberto o grupo da aba ativa
 function openNavGroup(name) {
   $$(".nav-children").forEach((c) => c.classList.toggle("open", c.dataset.group === name));
@@ -109,20 +109,34 @@ function openParentGroupOf(tabBtn) {
   const children = tabBtn && tabBtn.closest(".nav-children");
   if (children) openNavGroup(children.dataset.group);
 }
-function clearNavActive() { $$(".nav .tab, .nav-grouphdr.solo").forEach((x) => x.classList.remove("active")); }
-// clique no cabeçalho de um grupo → expande/recolhe. O "Ajustes" é solo: é uma aba direta.
+function clearNavActive() { $$(".nav .tab, .nav-grouphdr").forEach((x) => x.classList.remove("active")); }
+// troca a tela visível e roda o init da tela (fonte única de verdade da navegação)
+function showView(view) {
+  ALL_VIEWS.forEach((v) => { const s = $("#view-" + v); if (s) s.classList.toggle("hidden", v !== view); });
+  if (view === "inicio") initInicio();
+  else if (view === "semana") renderSemana();
+  else if (view === "verba") initVerba();
+  else if (view === "lab") initLab();
+  else if (view === "termos") { if ($("#termCampSel") && !$("#termCampSel").value && $("#termCampSel").options.length <= 1) loadTermCampaigns(); }
+  else if (view === "kw") loadKw();
+  else if (view === "historico") renderHistory();
+  else if (view === "perfil") loadPerfil();
+  else if (view === "meta") initMetaSession();
+  else if (view === "gads") initGadsSession();
+  else if (view === "gtm") initGtmSession();
+}
+// clique no cabeçalho de um grupo → expande/recolhe. Cabeçalhos com data-view (Início, Ajustes) também navegam.
 $$(".nav-grouphdr").forEach((h) => {
+  const dest = h.dataset.view;
   if (h.classList.contains("solo")) {
-    h.addEventListener("click", () => {
-      clearNavActive(); h.classList.add("active");
-      ALL_VIEWS.forEach((v) => $("#view-" + v).classList.toggle("hidden", v !== h.dataset.view));
-    });
+    h.addEventListener("click", () => { clearNavActive(); h.classList.add("active"); showView(dest); });
     return;
   }
   h.addEventListener("click", () => {
-    const open = h.classList.contains("expanded");
-    if (open) { h.classList.remove("expanded"); const c = $(`.nav-children[data-group="${h.dataset.group}"]`); if (c) c.classList.remove("open"); }
+    const wasOpen = h.classList.contains("expanded");
+    if (wasOpen && !dest) { h.classList.remove("expanded"); const c = $(`.nav-children[data-group="${h.dataset.group}"]`); if (c) c.classList.remove("open"); }
     else openNavGroup(h.dataset.group);
+    if (dest) { clearNavActive(); h.classList.add("active"); showView(dest); }
   });
 });
 
@@ -130,20 +144,8 @@ $$(".nav .tab").forEach((b) => b.addEventListener("click", () => {
   clearNavActive();
   b.classList.add("active");
   openParentGroupOf(b); // garante que o grupo da aba clicada fique aberto (inclui cliques programáticos)
-  ALL_VIEWS.forEach((v) => $("#view-" + v).classList.toggle("hidden", v !== b.dataset.view));
-  if (b.dataset.view === "semana") renderSemana();
-  if (b.dataset.view === "verba") initVerba();
-  if (b.dataset.view === "lab") initLab();
-  if (b.dataset.view === "termos" && $("#termCampSel") && !$("#termCampSel").value && $("#termCampSel").options.length <= 1) loadTermCampaigns();
-  if (b.dataset.view === "kw") loadKw();
-  if (b.dataset.view === "historico") renderHistory();
-  if (b.dataset.view === "perfil") loadPerfil();
-  if (b.dataset.view === "meta") initMetaSession();
-  if (b.dataset.view === "gads") initGadsSession();
-  if (b.dataset.view === "gtm") initGtmSession();
+  showView(b.dataset.view);
 }));
-// abre o grupo da aba ativa ao iniciar (Início, por padrão)
-openParentGroupOf($(".nav .tab.active"));
 
 // links externos (ex.: "onde pegar a chave") abrem no navegador, não dentro do app
 document.addEventListener("click", (e) => {
@@ -164,7 +166,7 @@ document.addEventListener("click", (e) => {
   renderRepMonth();
   if ($("#repEngineSel") && state.settings.reportEngine) $("#repEngineSel").value = state.settings.reportEngine;
   updateNavHint();
-  renderSemana(); // aba inicial
+  showView("inicio"); // abre no cockpit (Início)
   // atualização automática ao abrir: se houver versão nova no GitHub, baixa e reinicia sozinho
   try {
     const u = await window.api.updateCheck();
@@ -862,7 +864,7 @@ async function startLinkBoard(i) {
 }
 
 function fillClientSelectors() {
-  ["#clientSel", "#histClientSel", "#repClientSel", "#subClientSel", "#termClientSel", "#perfClientSel", "#kwClientSel", "#labClientSel"].forEach((sel) => {
+  ["#clientSel", "#histClientSel", "#repClientSel", "#subClientSel", "#termClientSel", "#perfClientSel", "#kwClientSel", "#labClientSel", "#inicioClientSel"].forEach((sel) => {
     if (!$(sel)) return;
     const el = $(sel); const prev = el.value;
     el.innerHTML = state.clients.map((c) => `<option value="${c.projectId}">${c.name}</option>`).join("");
@@ -2202,24 +2204,29 @@ $("#termBtn").addEventListener("click", async () => {
     if (!terms.length) { body.innerHTML = `<div class="state"><div class="big">🔎</div>Nenhum termo de busca no período para <b>${escopo}</b> (só campanhas de Pesquisa geram esses dados).</div>`; return; }
     state.termScope = escopo;
     const service = termServico(c);
+    if (!service.trim()) { state.terms = terms; renderTermos({}, {}, "Escreva o que o cliente faz no campo de contexto (embaixo) pra IA saber o que negativar — ou selecione os termos manualmente abaixo."); return; }
     body.innerHTML = `<div class="state"><div class="big">🤖</div>A IA está avaliando ${terms.length} termos com base no que o cliente faz…</div>`;
     const neg = {}, add = {};
+    let aiErr = "";
     try {
       const list = terms.slice(0, 150).map((t, i) => `${i}: ${t.term}`).join("\n");
       const prompt = [
-        `Você é analista de mídia paga. O cliente: "${service}".`,
-        `Abaixo, termos de busca reais que dispararam anúncios (índice: termo). Classifique:`,
-        `• NEGATIVAR: termos que NÃO fazem sentido pro negócio (busca por emprego/vaga, curso, grátis, concorrente irrelevante, fora do serviço) — desperdício.`,
-        `• ADICIONAR: termos MUITO relevantes pro serviço, com boa intenção de compra, que valeria a pena ter como palavra-chave própria.`,
-        `Responda SÓ um JSON: {"negativar":[{"i":<índice>,"motivo":"<curto>"}],"adicionar":[{"i":<índice>,"motivo":"<curto>"}]}. Um termo só pode estar numa lista. Sem texto extra.`,
-        list,
+        `Você é analista de mídia paga fazendo LIMPEZA de termos de busca do Google Ads.`,
+        `CONTEXTO DO CLIENTE (use como regra principal do que é relevante ou não): """${service}"""`,
+        `Abaixo, termos de busca reais que dispararam os anúncios (formato "índice: termo"). Classifique CADA termo:`,
+        `• NEGATIVAR — termos que NÃO combinam com o que o cliente faz, ou que ele explicitamente NÃO faz (emprego/vaga, curso, grátis, "como fazer", concorrente, produto/serviço fora do escopo, intenção errada). É desperdício de verba.`,
+        `• ADICIONAR — termos bem alinhados ao serviço, com intenção de compra, que valeria virar palavra-chave própria.`,
+        `Seja RIGOROSO: se o termo foge do contexto do cliente, NEGATIVE. Ignore os que estão certos (nem numa lista nem noutra).`,
+        `Responda SÓ um JSON válido, sem texto fora dele: {"negativar":[{"i":<índice>,"motivo":"<curto>"}],"adicionar":[{"i":<índice>,"motivo":"<curto>"}]}. Cada termo em no máximo uma lista.`,
+        `TERMOS:\n${list}`,
       ].join("\n\n");
       const raw = await window.api.geminiRaw({ prompt });
       const m = raw.match(/\{[\s\S]*\}/);
       if (m) { const o = JSON.parse(m[0]); (o.negativar || []).forEach((x) => { if (x && x.i != null) neg[x.i] = x.motivo || "irrelevante"; }); (o.adicionar || []).forEach((x) => { if (x && x.i != null) add[x.i] = x.motivo || "relevante"; }); }
-    } catch {}
+      else aiErr = "A IA respondeu num formato que não deu pra ler. Selecione os termos manualmente abaixo.";
+    } catch (e) { aiErr = "A IA não conseguiu classificar (" + (e.message || "erro") + "). Selecione manualmente abaixo."; console.warn("[termos IA]", e); }
     state.terms = terms;
-    renderTermos(neg, add);
+    renderTermos(neg, add, aiErr);
   } catch (e) { body.innerHTML = `<div class="state error"><div class="big">⚠️</div>${e.message}</div>`; }
 });
 
@@ -2235,7 +2242,7 @@ $("#termClientSel").addEventListener("change", () => {
   loadTermCampaigns(); // troca de cliente → recarrega as campanhas de Pesquisa
 });
 
-function renderTermos(neg, add) {
+function renderTermos(neg, add, aiErr) {
   const terms = state.terms || [];
   const body = $("#termBody");
   const brl = (n) => "R$ " + (n || 0).toFixed(2);
@@ -2247,6 +2254,29 @@ function renderTermos(neg, add) {
   const negIdx = negAll.filter((i) => !isExcluded(terms[i]));
   const addIdx = addAll.filter((i) => !isAdded(terms[i]));
   const jaNeg = negAll.length - negIdx.length, jaAdd = addAll.length - addIdx.length;
+
+  // MODO MANUAL: se a IA não marcou nada pra negativar (ou falhou), lista TODOS os termos
+  // (do maior custo pro menor) com caixinhas desmarcadas, pra você escolher na mão e negativar.
+  if (!negIdx.length) {
+    const manual = terms.map((t, i) => ({ t, i })).filter(({ t }) => !isExcluded(t)).sort((a, b) => (b.t.cost || 0) - (a.t.cost || 0));
+    const rows = manual.map(({ t, i }) => `<tr>
+        <td style="text-align:center"><input type="checkbox" class="term-ck" data-i="${i}"></td>
+        <td style="text-align:left">${t.term || ""}${add[i] ? `<div class="term-motivo" style="color:#7be8c0">➕ ${add[i]}</div>` : ""}</td>
+        <td>${t.campaignName || ""}</td><td>${E.fmt.n(t.clicks)}</td><td>${brl(t.cost)}</td><td>${t.conversions || 0}</td>
+      </tr>`).join("");
+    body.innerHTML = `<div class="warnbar" style="${aiErr ? "" : "background:rgba(25,227,162,.07);border-color:rgba(25,227,162,.3);color:#7be8c0"}">
+        ${aiErr ? "⚠️ " + aiErr : `🤖 A IA não achou termos claros pra negativar em ${terms.length}. Marque abaixo os que quiser negativar manualmente.`}</div>
+      <div class="section-title">🚫 Termos de busca (${manual.length}) — marque os que quer negativar</div>
+      <div class="table-wrap"><table><thead><tr><th style="width:40px">✓</th><th style="text-align:left">Termo</th><th>Campanha</th><th>Cliques</th><th>Custo</th><th>Conv.</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <button class="btn btn-purple" id="termNegBtn2" style="margin:10px 0 24px">🚫 Negativar selecionados</button>
+      ${addIdx.length ? `<div class="section-title">➕ Adicionar como palavra-chave (relevantes)</div>
+      <div class="table-wrap"><table><thead><tr><th style="width:40px">✓</th><th style="text-align:left">Termo</th><th>Campanha</th><th>Cliques</th><th>Conv.</th><th>Correspondência</th></tr></thead><tbody>${addIdx.map((i) => { const t = terms[i]; return `<tr><td style="text-align:center"><input type="checkbox" class="term-add-ck" data-i="${i}" checked></td><td style="text-align:left">${t.term || ""}<div class="term-motivo" style="color:#7be8c0">➕ ${add[i]}</div></td><td>${t.campaignName || ""}</td><td>${E.fmt.n(t.clicks)}</td><td>${t.conversions || 0}</td><td><select class="term-mt" data-i="${i}" style="background:var(--panel-2);border:1px solid var(--line);border-radius:7px;padding:5px 7px;color:var(--txt)"><option value="PHRASE">Frase</option><option value="BROAD">Ampla</option><option value="EXACT">Exata</option></select></td></tr>`; }).join("")}</tbody></table></div>
+      <button class="btn btn-primary" id="termAddBtn2" style="margin-top:10px">➕ Adicionar selecionadas</button>` : ""}`;
+    $("#termNegBtn").classList.add("hidden");
+    const nb = $("#termNegBtn2"); if (nb) nb.addEventListener("click", doNegate);
+    const ab = $("#termAddBtn2"); if (ab) ab.addEventListener("click", doAddKeywords);
+    return;
+  }
 
   const negRows = terms.map((t, i) => negIdx.includes(i) ? `<tr class="term-bad">
       <td style="text-align:center"><input type="checkbox" class="term-ck" data-i="${i}" checked></td>
@@ -4246,6 +4276,107 @@ async function loadVerbaWeeks(c, container, mm) {
     out.push(`<div class="verba-week-row"><div class="verba-week-lbl">Dias ${r.sd}–${r.fullEnd}${partial}</div><div class="verba-week-plats">${parts}</div></div>`);
   }
   container.innerHTML = out.join("") || '<div class="verba-muted">Sem semanas para mostrar ainda.</div>';
+}
+
+/* ============ INÍCIO (cockpit por cliente) ============ */
+let inicioWired = false;
+function inicioClient() { const pid = Number($("#inicioClientSel").value); return state.clients.find((c) => c.projectId === pid) || null; }
+// espalha o cliente escolhido pras outras telas (preseleciona os seletores por projectId — não dispara load)
+function syncClientEverywhere(pid) {
+  ["#repClientSel", "#histClientSel", "#perfClientSel", "#labClientSel", "#termClientSel", "#subClientSel", "#kwClientSel", "#clientSel"].forEach((sel) => {
+    const el = $(sel); if (el && [...el.options].some((o) => o.value === String(pid))) el.value = String(pid);
+  });
+}
+function navigateTo(view) { const el = $(`.nav .tab[data-view="${view}"]`) || $(`.nav-grouphdr[data-view="${view}"]`); if (el) el.click(); }
+function inicioGoto(view) { const c = inicioClient(); if (c) syncClientEverywhere(c.projectId); navigateTo(view); }
+
+function initInicio() {
+  if (!$("#inicioClientSel").value && state.clients[0]) $("#inicioClientSel").value = state.clients[0].projectId;
+  if (!inicioWired) {
+    inicioWired = true;
+    $("#inicioClientSel").addEventListener("change", () => { const c = inicioClient(); if (c) syncClientEverywhere(c.projectId); renderInicio(); });
+    $("#inicioRefresh").addEventListener("click", renderInicio);
+    $("#inicioBody").addEventListener("click", (e) => {
+      const g = e.target.closest("[data-goto]"); if (g) { e.preventDefault(); inicioGoto(g.dataset.goto); return; }
+      if (e.target.closest("#ckCheckAlerts")) inicioCheckAlerts();
+    });
+  }
+  const c = inicioClient(); if (c) syncClientEverywhere(c.projectId);
+  renderInicio();
+}
+function renderInicio() {
+  const c = inicioClient(); const body = $("#inicioBody");
+  if (!c) { body.innerHTML = `<div class="state"><div class="big">🏠</div>Cadastre um cliente em <b>Ajustes</b> pra começar.</div>`; return; }
+  body.innerHTML = `<div class="ck-hello">Resumo de <b>${vEsc(c.name)}</b> · ${monthLabelOf(new Date().getFullYear(), new Date().getMonth() + 1)}</div>
+  <div class="ck-grid">
+    <div class="ck-card" id="ckVerba"><div class="ck-h">💰 Verba do mês</div><div class="ck-loading">⏳ calculando…</div></div>
+    <div class="ck-card" id="ckAlertas"><div class="ck-h">🚨 Alertas</div><div class="ck-mut">Compara os últimos 2 dias com o padrão de 14.</div><button class="btn ck-btn" id="ckCheckAlerts">Verificar alertas</button></div>
+    <div class="ck-card" id="ckTestes"><div class="ck-h">🧪 Testes rodando</div><div class="ck-loading">⏳</div></div>
+    <div class="ck-card" id="ckEntrega"><div class="ck-h">📄 Entrega</div><div class="ck-loading">⏳</div></div>
+    <div class="ck-card ck-actions"><div class="ck-h">⚡ Ações rápidas</div>
+      <div class="ck-actrow">
+        <button class="btn" data-goto="painel">📊 Analisar semana</button>
+        <button class="btn" data-goto="lab">🧪 Laboratório</button>
+        <button class="btn" data-goto="relatorios">📄 Gerar relatório</button>
+        <button class="btn" data-goto="perfil">👤 Perfil</button>
+        <button class="btn" data-goto="meta">📘 Meta Ads</button>
+        <button class="btn" data-goto="gads">🟢 Google Ads</button>
+      </div>
+    </div>
+  </div>`;
+  fillCkVerba(c); fillCkTestes(c); fillCkEntrega(c);
+}
+async function fillCkVerba(c) {
+  const el = $("#ckVerba"); if (!el) return;
+  if (!c.budget || !(c.budget.meta || c.budget.google || c.budget.linkedin)) {
+    el.innerHTML = `<div class="ck-h">💰 Verba do mês</div><div class="ck-mut">Sem orçamento definido. <a href="#" data-goto="verba" class="ck-link">ver Verba</a></div>`;
+    return;
+  }
+  const mm = verbaMonthMeta();
+  try {
+    const ads = c.adAccounts || {};
+    const resp = await window.api.reporteiWeekData({ projectId: reporteiIdOf(c), start: mm.monthStart, end: mm.endDate, includeAds: false, directMeta: ads.meta || null, directGoogle: ads.google || null });
+    const spent = verbaSpendFromResp(resp);
+    const frac = mm.dim ? mm.elapsed / mm.dim : 0;
+    const rows = verbaPlatMeta.map(([k, label]) => {
+      const bud = c.budget[k]; if (!bud) return "";
+      const sp = spent[k] || 0, ideal = bud * frac, st = verbaStatus(ideal > 0 ? sp / ideal : 0), pct = Math.round(sp / bud * 100);
+      return `<div class="ck-vrow"><span>${st.ic} ${label}</span><span class="ck-mut">${brl0(sp)} / ${brl0(bud)} · ${pct}%</span></div>`;
+    }).filter(Boolean).join("");
+    el.innerHTML = `<div class="ck-h">💰 Verba do mês <button class="ck-mini" data-goto="verba">ver</button></div>${rows}<div class="ck-mut ck-foot">${mm.elapsed}/${mm.dim} dias do mês</div>`;
+  } catch (e) { el.innerHTML = `<div class="ck-h">💰 Verba do mês</div><div class="ck-mut">não deu pra puxar (${vEsc(e.message)})</div>`; }
+}
+async function fillCkTestes(c) {
+  const el = $("#ckTestes"); if (!el) return;
+  let exps = []; try { exps = await window.api.experimentsList(c.projectId); } catch {}
+  if (!exps.length) { el.innerHTML = `<div class="ck-h">🧪 Testes rodando</div><div class="ck-mut">Nenhum teste ainda. <a href="#" data-goto="lab" class="ck-link">abrir Laboratório</a></div>`; return; }
+  const run = exps.filter((e) => (e.status || "rodando") === "rodando");
+  const won = exps.filter((e) => e.status === "vencedor").length;
+  const list = run.slice(0, 4).map((e) => `<div class="ck-vrow"><span>${vEsc((e.acao || "").slice(0, 46))}</span></div>`).join("") || `<div class="ck-mut">Nenhum rodando agora.</div>`;
+  el.innerHTML = `<div class="ck-h">🧪 Testes rodando <span class="ck-badge">${run.length}</span> <button class="ck-mini" data-goto="lab">abrir</button></div>${list}${won ? `<div class="ck-mut ck-foot">✅ ${won} já venceram</div>` : ""}`;
+}
+async function fillCkEntrega(c) {
+  const el = $("#ckEntrega"); if (!el) return;
+  let list = []; try { list = await window.api.historyList(c.projectId); } catch {}
+  const reports = list.filter((h) => h.kind === "report");
+  const lm = new Date(); lm.setDate(1); lm.setMonth(lm.getMonth() - 1);
+  const lastLabel = monthLabelOf(lm.getFullYear(), lm.getMonth() + 1);
+  const hasLast = reports.some((r) => r.monthLabel === lastLabel);
+  const latest = reports.slice().sort((a, b) => (String(a.savedAt) < String(b.savedAt) ? 1 : -1))[0];
+  el.innerHTML = `<div class="ck-h">📄 Entrega <button class="ck-mini" data-goto="relatorios">relatórios</button></div>
+    <div class="ck-vrow"><span>Relatório de ${vEsc(lastLabel)}</span><span class="${hasLast ? "ck-ok" : "ck-warn"}">${hasLast ? "feito" : "a gerar"}</span></div>
+    <div class="ck-mut ck-foot">${latest ? `último salvo: ${vEsc(latest.monthLabel || latest.weekLabel || "—")}` : "nenhum relatório salvo ainda"}</div>`;
+}
+async function inicioCheckAlerts() {
+  const c = inicioClient(); const el = $("#ckAlertas"); if (!c || !el) return;
+  el.innerHTML = `<div class="ck-h">🚨 Alertas</div><div class="ck-loading">⏳ varrendo os clientes…</div>`;
+  try {
+    const r = await window.api.urgencyScan();
+    const mine = (r.results || []).find((x) => x.projectId === c.projectId);
+    if (!mine || !mine.alerts.length) { el.innerHTML = `<div class="ck-h">🚨 Alertas <span class="ck-ok">ok</span></div><div class="ck-mut">Nada fora do comum nos últimos 2 dias.</div>`; return; }
+    const rows = mine.alerts.slice(0, 4).map((a) => `<div class="ck-alert ck-sev-${a.sev === "alta" ? "hi" : "md"}">${vEsc(a.txt)}</div>`).join("");
+    el.innerHTML = `<div class="ck-h">🚨 Alertas <span class="ck-badge bad">${mine.alerts.length}</span> <button class="ck-mini" data-goto="urgencia">detalhes</button></div>${rows}`;
+  } catch (e) { el.innerHTML = `<div class="ck-h">🚨 Alertas</div><div class="ck-mut">${vEsc(e.message)}</div>`; }
 }
 
 /* ============ ABA LABORATÓRIO (otimizações/testes por cliente) ============ */
