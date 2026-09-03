@@ -23,8 +23,12 @@ const DEFAULT_STORE = {
 
 function readStore() {
   try {
-    const raw = fs.readFileSync(STORE_PATH(), "utf8");
-    return Object.assign({}, DEFAULT_STORE, JSON.parse(raw));
+    const raw = JSON.parse(fs.readFileSync(STORE_PATH(), "utf8"));
+    const merged = Object.assign({}, DEFAULT_STORE, raw);
+    // merge PROFUNDO das settings: preenche padrões que faltam (ex.: updateBaseUrl em store antigo)
+    // sem sobrescrever o que o usuário já salvou
+    merged.settings = Object.assign({}, DEFAULT_STORE.settings, raw.settings || {});
+    return merged;
   } catch {
     return JSON.parse(JSON.stringify(DEFAULT_STORE));
   }
@@ -3516,16 +3520,19 @@ function localVersion() { try { const v = fs.readFileSync(patchVersionFile(), "u
 function verNum(v) { return String(v || "0").split(".").map((n) => parseInt(n, 10) || 0); }
 function isNewer(a, b) { const x = verNum(a), y = verNum(b); for (let i = 0; i < 3; i++) { if ((x[i] || 0) > (y[i] || 0)) return true; if ((x[i] || 0) < (y[i] || 0)) return false; } return false; }
 
+// URL padrão do repositório de updates — usada quando o store não tem uma configurada
+// (ex.: store antigo criado antes desse campo existir). Sem isso os updates ficam desligados.
+const DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/erikedias/pmp-update-bfypgb/main";
 ipcMain.handle("update:check", async () => {
-  const base = (readStore().settings.updateBaseUrl || "").replace(/\/+$/, "");
+  const base = ((readStore().settings.updateBaseUrl || "").trim() || DEFAULT_UPDATE_URL).replace(/\/+$/, "");
   const local = localVersion();
-  if (!base) return { local, configured: false };
   const manifest = await httpJson(`${base}/update.json?t=${Date.now()}`);
   return { local, latest: manifest.version, notes: manifest.notes || "", files: manifest.files || [], hasUpdate: isNewer(manifest.version, local), configured: true, base };
 });
 
 ipcMain.handle("update:apply", async (_e, { base, files, version }) => {
-  if (!base || !Array.isArray(files) || !files.length) throw new Error("Manifesto de atualização inválido.");
+  base = (base || "").trim() || DEFAULT_UPDATE_URL;
+  if (!Array.isArray(files) || !files.length) throw new Error("Manifesto de atualização inválido.");
   let n = 0;
   for (const rel of files) {
     if (rel.includes("..")) continue; // segurança: nada de sair da pasta do app
