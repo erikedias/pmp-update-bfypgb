@@ -2572,10 +2572,17 @@ async function fillReportAnalysis(sec, cName, monthLabel, opts) {
   try {
     const raw = sec.raw || {};
     const pick = (arr) => (arr || []).map((a) => ({ name: a.name, ctr: a.ctr, results: a.results, cpr: a.cpr, spend: a.spend }));
+    // campanhas isoladas: normaliza os nomes de campo (leads/conversions, cpl/cpa, cost) pro formato do prompt
+    const pickCamp = (arr) => (arr || []).map((a) => ({
+      name: a.name, ctr: a.ctr,
+      results: a.results != null ? a.results : (a.leads != null ? a.leads : a.conversions),
+      cpr: a.cpr != null ? a.cpr : (a.cpl != null ? a.cpl : a.cpa),
+      spend: a.spend != null ? a.spend : a.cost,
+    }));
     const txt = await window.api.reportAnalyze({
       clientName: cName, monthLabel, label: sec.label,
       kpis: (sec.kpis || []).map((k) => ({ label: k.label, value: k.value, prev: k.prev, kind: k.kind })),
-      adsets: pick(raw.adsets), ads: pick(raw.ads), quali: sec.quali || null,
+      campaigns: pickCamp(raw.campaigns), adsets: pick(raw.adsets), ads: pick(raw.ads), quali: sec.quali || null,
       benchmarks: repBenchList(sec.platform, opts.benchmarks),
       obs: sec.obs || "", mode: sec.mode || "mensal", engine: opts.engine || repEngine(),
     });

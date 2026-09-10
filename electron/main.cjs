@@ -795,6 +795,7 @@ function buildReportAnalysisPrompt(d) {
   const dl = (v, p) => (p == null || p === 0 || v == null) ? "" : (() => { const x = parseFloat(((v - p) / p * 100).toFixed(1)); return ` (${x > 0 ? "+" : ""}${x}% vs período anterior)`; })();
   const kpiLines = (d.kpis || []).map((k) => `${k.label}: ${fv(k.kind, k.value)}${dl(k.value, k.prev)}`).join("\n");
   const listLine = (a) => `${a.name}: CTR ${a.ctr != null ? parseFloat(Number(a.ctr).toFixed(2)) + "%" : "sem dado"}, resultados ${a.results != null ? a.results : "sem dado"}, custo por resultado ${a.cpr != null ? "R$ " + Number(a.cpr).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "sem dado"}, investido R$ ${Number(a.spend || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+  const campaignLines = (d.campaigns || []).map(listLine).join("\n");
   const adsetLines = (d.adsets || []).map(listLine).join("\n");
   const adLines = (d.ads || []).map(listLine).join("\n");
   const benchLines = (d.benchmarks || []).filter((b) => b && b.name && b.bench != null).map((b) => `${b.name}: benchmark de mercado ≥ ${b.bench}%`).join("\n");
@@ -819,14 +820,15 @@ function buildReportAnalysisPrompt(d) {
     (d.adsets && d.adsets.length) ? `Depois da jornada, adicione "## Públicos" com um parágrafo destacando o público de melhor CPL e de melhor CTR, e os mais caros que devem ter a verba realocada.` : "",
     (d.ads && d.ads.length) ? `Depois, adicione "## Anúncios" com um parágrafo destacando os anúncios de melhor resultado e os que devem ser trocados.` : "",
     canc
-      ? `SEMPRE termine com "## Sugestões" e UM parágrafo com recomendações práticas para MANTER e evoluir os resultados do período (o que funcionou e vale continuar, quais públicos/criativos preservar, o que ajustar para sustentar o desempenho daqui pra frente). É um panorama de encerramento — sugestões para seguir tendo resultado, não um plano de tarefas do próximo mês. Cite nomes e números específicos; nada genérico.`
-      : `SEMPRE termine com "## Próximos Passos" e UM parágrafo com as ações concretas para o próximo mês que atacam os gargalos identificados neste mês (métricas que ficaram abaixo do esperado, públicos/anúncios caros para realocar verba, criativos a testar ou pausar, ajustes de segmentação/lance). Cite nomes e números específicos; nada genérico como "continuar otimizando".`,
+      ? `SEMPRE termine com "## Sugestões" e UM parágrafo com recomendações práticas para MANTER e evoluir os resultados. REGRA CENTRAL: raciocine no NÍVEL ISOLADO — quais CAMPANHAS e PÚBLICOS específicos funcionaram e valem continuar/escalar, e quais ajustar — nunca no agregado. Cite os nomes. É um panorama de encerramento, não um plano de tarefas do próximo mês.`
+      : `SEMPRE termine com "## Próximos Passos" e UM parágrafo de ações concretas para o próximo mês. REGRA CENTRAL: as ações devem ser NO NÍVEL ISOLADO (campanha a campanha e/ou público a público), NUNCA no agregado. Se uma métrica geral estiver ruim (ex.: CTR médio baixo), NÃO trate como se o problema fosse de toda a conta — olhe as CAMPANHAS e PÚBLICOS listados abaixo, identifique EXATAMENTE qual(is) está(ão) puxando o número pra baixo e direcione a ação só a ele(s), citando o nome. Errado: "o CTR está baixo, trocar criativos". Certo: "a campanha X está com CTR 0,4% (contra 1,3% da Y) — renovar o criativo da X e realocar verba pra Y". Priorize o nível adequado à plataforma: no META, os PÚBLICOS (conjuntos); no GOOGLE e LINKEDIN, as CAMPANHAS. Cite nomes e números específicos; nada genérico como "continuar otimizando".`,
     d.obs ? `OBSERVAÇÕES DA ANALISTA — contexto real que explica os números e que você não teria como saber pelos dados. Incorpore cada observação COM NATURALIDADE dentro do parágrafo da métrica a que ela se refere, como causa do que aconteceu (ex.: "as impressões caíram 30% porque a correspondência das palavras-chave foi alterada para frase, o que reduziu o alcance"). NÃO crie seção/título separado pra elas, NÃO escreva "observação:", NÃO copie o texto cru — reescreva bem escrito. NÃO invente nada além do que está aqui:\n"""${String(d.obs).slice(0, 1500)}"""` : "",
     `REGRAS: já é a análise pronta — NÃO diga "vou analisar", NÃO diga "seguindo a jornada", NÃO explique seu método, NÃO repita estas instruções; comece direto no primeiro "## ". NÃO use traços, asteriscos, listas com marcador nem markdown — só "## " nos títulos e parágrafos normais. Use SOMENTE os dados abaixo; se algo for zero/ausente, comente com naturalidade sem inventar número. Tom profissional e claro, em português.`,
     `\nMÉTRICAS (jornada, na ordem):\n${kpiLines}`,
     benchLines ? `\nBENCHMARKS DE MERCADO (base de comparação — use exatamente estes):\n${benchLines}` : "",
     qualiLines ? `\nQUALIFICAÇÃO (analise cada uma; NÃO invente número — só o que está aqui):\n${qualiLines}` : "",
-    adsetLines ? `\nPÚBLICOS (conjuntos de anúncio):\n${adsetLines}` : "",
+    campaignLines ? `\nCAMPANHAS ISOLADAS (use pra achar QUAL campanha puxa cada métrica — base dos Próximos Passos no Google/LinkedIn):\n${campaignLines}` : "",
+    adsetLines ? `\nPÚBLICOS (conjuntos de anúncio — base dos Próximos Passos no Meta):\n${adsetLines}` : "",
     adLines ? `\nANÚNCIOS:\n${adLines}` : "",
   ].filter(Boolean).join("\n");
 }
