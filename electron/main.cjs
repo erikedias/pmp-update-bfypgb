@@ -2734,13 +2734,21 @@ function linkedinReportSection(li, prev, name) {
     { label: "Leads", value: _en(leads), prev: _en(pl), dir: _dir(leads, pl) },
   ];
   const camps = (li.rows || []).filter((r) => r.level === "campaign");
-  const tbl = { type: "table", cols: [{ label: "Campanha", l: true }, { label: "Envios" }, { label: "Aberturas" }, { label: "Cliques" }, { label: "Leads" }, { label: "CPL" }, { label: "Investido" }], rows: camps.map((r) => { const m = r.metrics || {}, sp = spendOf(m), ld = n(m.leads); return [{ v: r.name, l: true }, _en(n(m.sends)), _en(n(m.opens)), _en(n(m.clicks)), _en(ld), _brl(ld ? sp / ld : null), _brl(sp)]; }) };
+  const auds = (li.rows || []).filter((r) => r.level === "audience");
+  const liTable = (rows, firstLabel) => ({ type: "table", cols: [{ label: firstLabel, l: true }, { label: "Envios" }, { label: "Aberturas" }, { label: "Cliques" }, { label: "Leads" }, { label: "CPL" }, { label: "Investido" }], rows: rows.map((r) => { const m = r.metrics || {}, sp = spendOf(m), ld = n(m.leads); return [{ v: r.name, l: true }, _en(n(m.sends)), _en(n(m.opens)), _en(n(m.clicks)), _en(ld), _brl(ld ? sp / ld : null), _brl(sp)]; }) });
+  const tbl = liTable(camps, "Campanha");
+  const pubTbl = auds.length ? liTable(auds, "Público") : null;
   const extraMetrics = [];
   if (clicks > 0) extraMetrics.push({ label: "CPC médio", kind: "brl", value: spend / clicks, prev: pc ? pspend / pc : null });
   if (clicks > 0 && leads > 0) extraMetrics.push({ label: "Taxa de preenchimento", kind: "pct", value: rate(leads, clicks), prev: rate(pl, pc) });
   if (opens > 0) extraMetrics.push({ label: "Custo por abertura", kind: "brl", value: spend / opens, prev: po ? pspend / po : null });
   const campaigns = camps.map((r) => { const m = r.metrics || {}, sp = spendOf(m), ld = n(m.leads), cl = n(m.clicks), op = n(m.opens), se = n(m.sends); return { name: r.name, sends: se, opens: op, clicks: cl, leads: ld, spend: sp, openRate: se ? op / se * 100 : null, clickRate: op ? cl / op * 100 : null, cpl: ld ? sp / ld : null }; });
-  return { platform: "linkedin", label: "LinkedIn Ads", subtitle: name || "", accent: "#0a66c2", topAccent: true, kpis, funnel, extraMetrics, blocks: [{ type: "analysis", id: "linkedin-geral" }, { type: "title", text: "Campanhas" }, tbl, { type: "analysis", id: "linkedin-campanhas" }, { type: "proximos", id: "linkedin-proximos" }], raw: { totals: t, prev: p, campaigns } };
+  // públicos (nível de audiência do LinkedIn) — pro bloco "Públicos" e pros Próximos Passos por público
+  const adsets = auds.map((r) => { const m = r.metrics || {}, sp = spendOf(m), ld = n(m.leads), cl = n(m.clicks), op = n(m.opens); return { name: r.name, ctr: op ? cl / op * 100 : null, results: ld || null, cpr: ld ? sp / ld : null, spend: sp }; });
+  const blocks = [{ type: "analysis", id: "linkedin-geral" }, { type: "title", text: "Campanhas" }, tbl, { type: "analysis", id: "linkedin-campanhas" }];
+  if (pubTbl) blocks.push({ type: "title", text: "Públicos" }, pubTbl, { type: "analysis", id: "linkedin-publicos" });
+  blocks.push({ type: "proximos", id: "linkedin-proximos" });
+  return { platform: "linkedin", label: "LinkedIn Ads", subtitle: name || "", accent: "#0a66c2", topAccent: true, kpis, funnel, extraMetrics, blocks, raw: { totals: t, prev: p, campaigns, adsets } };
 }
 
 // mapa nome-do-anúncio → miniatura do criativo (Meta), pra mostrar as imagens mesmo quando os
