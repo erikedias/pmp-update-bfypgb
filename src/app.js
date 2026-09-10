@@ -2475,7 +2475,7 @@ function reportPeriod(ms) {
 // os textos editáveis (contenteditable) pra poder revisar depois no histórico
 function reportHtmlForSave(pageEl) {
   const clone = pageEl.cloneNode(true);
-  clone.querySelectorAll(".rr-kpi-x,.rr-addmetric-wrap,.rr-metricmenu,.rr-remove,.rr-clock,.rr-drop-mark,.rr-trello-x,.rr-obs").forEach((el) => el.remove());
+  clone.querySelectorAll(".rr-kpi-x,.rr-addmetric-wrap,.rr-metricmenu,.rr-remove,.rr-clock,.rr-drop-mark,.rr-trello-x,.rr-obs,.rr-col-x,.rr-edit-col").forEach((el) => el.remove());
   clone.querySelectorAll("[draggable]").forEach((el) => el.removeAttribute("draggable"));
   return `<div class="rr-page">${clone.innerHTML}</div>`;
 }
@@ -2685,7 +2685,7 @@ $("#pdfRelBtn").addEventListener("click", async () => {
   const btn = $("#pdfRelBtn"), old = btn.textContent;
   btn.textContent = "⏳ gerando PDF…"; btn.disabled = true;
   try {
-    const r = await window.api.reportExportPdf({ html: `<div class="rr-page">${doc.innerHTML}</div>`, title: `${d.cName || "relatorio"} - ${d.monthLabel || ""}` });
+    const r = await window.api.reportExportPdf({ html: reportHtmlForSave(doc), title: `${d.cName || "relatorio"} - ${d.monthLabel || ""}` });
     if (r && r.saved) toast("PDF salvo!");
   } catch (e) { toast("Erro ao gerar PDF: " + e.message, true); }
   finally { btn.textContent = old; btn.disabled = false; }
@@ -2824,6 +2824,17 @@ root.addEventListener("click", (e) => {
     if (!rest.length) { $("#pdfRelBtn").classList.add("hidden"); $("#copyRelBtn").classList.add("hidden"); const sh = $("#repSaveHistBtn"); if (sh) sh.classList.add("hidden"); }
     return;
   }
+  // remover uma LINHA da tabela (público/campanha/anúncio que você não quer)
+  const rowX = e.target.closest(".rr-row-x");
+  if (rowX) { const tr = rowX.closest("tr"); if (tr) tr.remove(); return; }
+  // remover uma COLUNA da tabela (ex.: Investido zerado) — tira o mesmo índice do cabeçalho e de todas as linhas
+  const colX = e.target.closest(".rr-col-x");
+  if (colX) {
+    const th = colX.closest("th"); const table = colX.closest("table"); if (!th || !table) return;
+    const idx = th.cellIndex;
+    table.querySelectorAll("tr").forEach((tr) => { const cell = tr.children[idx]; if (cell) cell.remove(); });
+    return;
+  }
   // remover uma métrica (KPI ✕)
   const xb = e.target.closest(".rr-kpi-x");
   if (xb) {
@@ -2931,6 +2942,15 @@ function enableReportEditingDom(root) {
       wrap.innerHTML = `<button type="button" class="rr-addmetric" data-platform="${platform}">➕ Adicionar métrica</button>`;
       grid.after(wrap);
     }
+    // re-injeta os controles de excluir LINHA/COLUNA nas tabelas (foram tirados ao salvar)
+    sec.querySelectorAll("table.rr-tbl").forEach((tbl) => {
+      if (tbl.querySelector(".rr-edit-col")) return; // já tem controles
+      tbl.querySelectorAll("thead th").forEach((th) => {
+        if (!th.querySelector(".rr-col-x")) { const b = document.createElement("button"); b.type = "button"; b.className = "rr-col-x"; b.title = "Remover esta coluna"; b.textContent = "✕"; th.appendChild(b); }
+      });
+      const htr = tbl.querySelector("thead tr"); if (htr) { const th = document.createElement("th"); th.className = "rr-edit-col"; htr.appendChild(th); }
+      tbl.querySelectorAll("tbody tr").forEach((tr) => { const td = document.createElement("td"); td.className = "rr-edit-col"; td.innerHTML = `<button type="button" class="rr-row-x" title="Remover esta linha">✕</button>`; tr.appendChild(td); });
+    });
   });
 }
 

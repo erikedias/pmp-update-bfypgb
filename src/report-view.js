@@ -215,14 +215,16 @@
     return html;
   }
 
-  function table(t) {
-    const head = t.cols.map((c) => `<th class="${c.l ? "l" : ""}${c.sort ? " sort" : ""}">${esc(c.label)}${c.sort ? " ↓" : ""}</th>`).join("");
+  function table(t, editable) {
+    const colx = editable ? `<button type="button" class="rr-col-x" title="Remover esta coluna">✕</button>` : "";
+    const head = t.cols.map((c) => `<th class="${c.l ? "l" : ""}${c.sort ? " sort" : ""}">${esc(c.label)}${c.sort ? " ↓" : ""}${colx}</th>`).join("")
+      + (editable ? `<th class="rr-edit-col"></th>` : "");
     const body = t.rows.map((r) => `<tr>${r.map((cell) => {
       if (cell && cell.thumb !== undefined) return `<td class="l"><div class="rr-ad-name"><img class="rr-thumb" src="${cell.thumb || TRANSPARENT}" alt=""/><span>${esc(cell.name)}</span></div></td>`;
       if (cell && cell.l) return `<td class="l">${esc(cell.v)}${cell.sub ? `<span class="r-sub">${esc(cell.sub)}</span>` : ""}</td>`;
       if (cell && typeof cell === "object") return `<td>${esc(cell.v)}${cell.sub ? `<span class="r-sub">${esc(cell.sub)}</span>` : ""}</td>`;
       return `<td>${esc(cell)}</td>`;
-    }).join("")}</tr>`).join("");
+    }).join("")}${editable ? `<td class="rr-edit-col"><button type="button" class="rr-row-x" title="Remover esta linha">✕</button></td>` : ""}</tr>`).join("");
     return `<div class="rr-tbl-wrap"><table class="rr-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   }
   const TRANSPARENT = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='46'%3E%3Crect width='46' height='46' rx='8' fill='%23eef1f5'/%3E%3C/svg%3E";
@@ -301,7 +303,7 @@
     if (opts.editable) inner += obsBlock(d.platform);
     (d.blocks || []).forEach((b) => {
       if (b.type === "title") inner += `<div class="rr-title">${esc(b.text)} ${q()}</div>`;
-      else if (b.type === "table") inner += table(b);
+      else if (b.type === "table") inner += table(b, opts.editable);
       else if (b.type === "proximos") { const canc = d.mode === "cancelamento"; inner += `<div class="rr-nextsteps"><div class="rr-ns-title">${canc ? "💡 Sugestões" : "🎯 Próximos Passos"}</div><div class="rr-analysis" data-analysis="${esc(b.id)}"${opts.editable ? ' contenteditable="true"' : ""}><span class="rr-ph">${canc ? "⏳ montando as sugestões…" : "⏳ definindo os próximos passos…"}</span></div></div>`; }
       else if (b.type === "analysis" && b.id) inner += `<div class="rr-analysis" data-analysis="${esc(b.id)}"${opts.editable ? ' contenteditable="true"' : ""}><span class="rr-ph">⏳ gerando análise…</span></div>`;
       else if (b.type === "analysis") inner += analysisBlock(b.data, opts.editable);
