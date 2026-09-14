@@ -2849,9 +2849,18 @@ ipcMain.handle("report:build", async (_e, { projectId, start, end, prevStart, pr
   }
   const rp = (res, plat) => res && (res.platforms || []).find((p) => p.platform === plat);
   // META — API direta (rica) se houver conta; senão Reportei (lean)
-  let metaDone = false;
-  if (acc.meta && st.settings.metaToken) { try { const s = await metaReportSection(acc.meta, start, end, prevStart, prevEnd, cname); if (s) { sections.push(s); metaDone = true; } } catch (e) { notes.push("Meta API: " + (e.message || e)); } }
-  if (!metaDone) { const li = rp(repCur, "meta"); if (li) { sections.push(await metaLeanFromReportei(li, rp(repPrev, "meta"), cname, acc.meta)); if (acc.meta) notes.push("Meta: usei dados do Reportei (API direta sem retorno)."); } }
+  let metaDone = false, metaTokenExpired = false;
+  if (acc.meta && st.settings.metaToken) {
+    try { const s = await metaReportSection(acc.meta, start, end, prevStart, prevEnd, cname); if (s) { sections.push(s); metaDone = true; } }
+    catch (e) {
+      const msg = String((e && e.message) || e);
+      if (/expired|OAuthException|\b190\b|access token|Cannot parse access token|Error validating access token/i.test(msg)) {
+        metaTokenExpired = true;
+        notes.push("O token do Meta expirou ou está inválido — reconecte em Ajustes → Meta para voltar a puxar os dados diretos e as MINIATURAS dos criativos. (Enquanto isso os números do Meta vêm do Reportei e as miniaturas ficam vazias.)");
+      } else notes.push("Meta API: " + msg);
+    }
+  }
+  if (!metaDone) { const li = rp(repCur, "meta"); if (li) { sections.push(await metaLeanFromReportei(li, rp(repPrev, "meta"), cname, acc.meta)); if (acc.meta && !metaTokenExpired) notes.push("Meta: usei dados do Reportei (API direta sem retorno)."); } }
   // GOOGLE
   let gDone = false;
   if (acc.google && st.settings.googleAdsRefreshToken) { try { const s = await googleReportSection(acc.google, start, end, prevStart, prevEnd, cname); if (s) { sections.push(s); gDone = true; } } catch (e) { notes.push("Google API: " + (e.message || e)); } }

@@ -2456,7 +2456,11 @@ async function gerarRelatorio() {
     ReportView.renderInto(body, resp.sections, { editable: true });
     state.repDoc = { cName, monthLabel, projectId, mode, benchmarks: repCli.benchmarks || {}, sections: resp.sections };
     $("#copyRelBtn").classList.remove("hidden"); $("#pdfRelBtn").classList.remove("hidden"); $("#saveHistRelBtn").classList.remove("hidden");
-    if ((resp.notes || []).length) console.warn("[relatório]", resp.notes.join(" | "));
+    if ((resp.notes || []).length) {
+      console.warn("[relatório]", resp.notes.join(" | "));
+      // avisos (ex.: token do Meta expirado) aparecem no topo, mas NÃO entram no PDF/histórico (rr-note)
+      body.insertAdjacentHTML("afterbegin", `<div class="rr-note">${resp.notes.map((nt) => `<div>⚠️ ${nt}</div>`).join("")}</div>`);
+    }
     // preenche a análise de cada seção (Gemini/Claude) — em paralelo; otimizações têm review próprio
     resp.sections.forEach((sec) => { if (sec.platform === "otimizacoes") { fillOptimReview(sec, cName, monthLabel); } else { fillReportAnalysis(sec, cName, monthLabel); fillCampaignAnalysis(sec, cName, monthLabel); } });
     return;

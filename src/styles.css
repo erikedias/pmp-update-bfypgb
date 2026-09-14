@@ -447,3 +447,7 @@ tr.term-bad{background:rgba(255,107,107,.06)}
 .ck-sev-md{border-left-color:#f4b740}
 .ck-actrow{display:flex;flex-wrap:wrap;gap:8px}
 .ck-actrow .btn{font-size:12.5px;padding:8px 13px}
+
+/* aviso do relatório (ex.: token Meta expirado) — fora do .rr-page, não vai pro PDF */
+.rr-note{background:rgba(244,183,64,.12);border:1px solid rgba(244,183,64,.5);color:#f4b740;border-radius:12px;padding:12px 16px;margin:0 0 14px;font-size:13.5px;line-height:1.5}
+.rr-note div + div{margin-top:6px}
