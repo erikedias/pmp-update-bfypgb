@@ -167,14 +167,16 @@ document.addEventListener("click", (e) => {
   if ($("#repEngineSel") && state.settings.reportEngine) $("#repEngineSel").value = state.settings.reportEngine;
   updateNavHint();
   showView("inicio"); // abre no cockpit (Início)
-  // atualização automática ao abrir: se houver versão nova no GitHub, baixa e reinicia sozinho
+  // ao abrir: só VERIFICA se há versão nova (NÃO baixa nem reinicia sozinho).
+  // A atualização é sempre MANUAL: a analista vai em Ajustes → "Verificar atualização" → "Atualizar".
   try {
     const u = await window.api.updateCheck();
     $("#appVersion").textContent = "v" + (u.local || "?");
     if (u.hasUpdate && u.files && u.files.length) {
-      showUpdateOverlay(u.latest);
-      try { await window.api.updateApply({ base: u.base, files: u.files, version: u.latest }); }
-      catch (e) { hideUpdateOverlay(); toast("Não consegui atualizar automaticamente (" + e.message + "). Tente em ⚙️ Configurações.", true); }
+      // avisa de forma não-intrusiva; não interrompe o trabalho
+      toast(`🆕 Nova versão v${u.latest} disponível — atualize em ⚙️ Ajustes quando quiser.`);
+      const m = $("#updateMsg"); if (m) m.innerHTML = `🆕 nova versão <b>v${u.latest}</b> disponível — clique em <b>Verificar atualização</b> para instalar.`;
+      const tab = document.querySelector('.nav-grouphdr.solo[data-view="config"]'); if (tab) tab.classList.add("has-update");
     }
   } catch {}
 })();

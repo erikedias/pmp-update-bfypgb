@@ -451,3 +451,7 @@ tr.term-bad{background:rgba(255,107,107,.06)}
 /* aviso do relatório (ex.: token Meta expirado) — fora do .rr-page, não vai pro PDF */
 .rr-note{background:rgba(244,183,64,.12);border:1px solid rgba(244,183,64,.5);color:#f4b740;border-radius:12px;padding:12px 16px;margin:0 0 14px;font-size:13.5px;line-height:1.5}
 .rr-note div + div{margin-top:6px}
+
+/* aviso de update disponível no menu Ajustes (atualização é manual) */
+.nav-grouphdr.has-update{position:relative}
+.nav-grouphdr.has-update::after{content:"";position:absolute;top:9px;left:26px;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)}
